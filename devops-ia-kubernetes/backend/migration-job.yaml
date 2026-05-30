@@ -13,6 +13,7 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     environment: production
 spec:
+  activeDeadlineSeconds: 120
   backoffLimit: 2
   template:
     metadata:

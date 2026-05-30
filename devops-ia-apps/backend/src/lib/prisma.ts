@@ -52,12 +52,9 @@ async function refreshClient(): Promise<void> {
       old.$disconnect().catch(() => undefined)
     }
   } catch (err) {
-    console.error('[prisma] IAM token refresh failed — keeping existing client:', err)
+    console.error('[prisma] IAM token refresh failed, keeping existing client:', err)
   }
 }
-
-// Initialised lazily on first import; replaced on each token refresh.
-let _client: PrismaClient | undefined
 
 // Export shape that allows the refresh cycle to update the reference in place.
 const prismaExports: { prisma: PrismaClient } = { prisma: undefined as unknown as PrismaClient }
