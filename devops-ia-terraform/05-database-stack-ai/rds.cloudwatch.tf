@@ -11,6 +11,7 @@ resource "aws_sns_topic_subscription" "rds_alerts_email" {
   topic_arn = aws_sns_topic.rds_alerts.arn
   protocol  = "email"
   endpoint  = var.alerts.email
+  # Gmail pre-fetches links and auto-triggers unsubscribe. Use Hotmail/Outlook.
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_connections_high" {
