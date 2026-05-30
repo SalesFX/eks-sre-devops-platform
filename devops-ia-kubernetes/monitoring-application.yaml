@@ -73,6 +73,11 @@ spec:
               memory: "64Mi"
               cpu: "100m"
 
+        vmalert:
+          spec:
+            extraArgs:
+              notifier.blackhole: "true"
+
         alertmanager:
           enabled: false
   destination:
