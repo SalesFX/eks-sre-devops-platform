@@ -39,6 +39,18 @@ skip-check:
   - CKV2_AWS_62
   # CKV2_K8S_6: NetworkPolicy — deferida para Fase 2 (Kyverno ADR-0011). Workshop não tem CNI com NetworkPolicy.
   - CKV2_K8S_6
+  # CKV_K8S_21: Default namespace — Kustomize injeta namespace: app em runtime via kustomization.yaml;
+  # Checkov escaneia YAMLs brutos sem entender overlays do Kustomize. ADR-0006.
+  - CKV_K8S_21
+  # CKV_K8S_35: Secrets como env vars — JWT_SECRET e DATABASE_URL via secretKeyRef são env vars
+  # necessários para compatibilidade com Prisma e Express. ADR-0014 e ADR-0015.
+  - CKV_K8S_35
+  # CKV_K8S_38: ServiceAccount token automount — backend usa automountServiceAccountToken: true
+  # para IRSA (rds-signer precisa do token OIDC). Frontend tem false. ADR-0014.
+  - CKV_K8S_38
+  # CKV_K8S_40: UID alto — projeto usa runAsUser: 1001 (non-root); Checkov exige UID > 10000.
+  # 1001 é o padrão seguro do node:alpine e satisfaz runAsNonRoot. ADR-0006.
+  - CKV_K8S_40
 
 # Diretórios a excluir da análise
 skip-path:
