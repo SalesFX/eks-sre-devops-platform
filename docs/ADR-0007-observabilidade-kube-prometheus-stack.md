@@ -1,11 +1,11 @@
 # ADR-0007: Observabilidade com kube-prometheus-stack
 
-> **ARCHIVED:** Esta ADR foi supersedida. Consulte ADR-0007-observabilidade-free-tier-metrics-server.md
+> **SUPERSEDED (2026-05-30):** Esta ADR foi substituida pela decisao de observabilidade free-tier baseada em metrics-server. Consulte `ADR-0007-observabilidade-free-tier-metrics-server.md`.
 >
-> Motivo: este documento assumia node group `t3.medium x2` e a conta AWS `654654554686` (ambos desatualizados). O cluster real foi provisionado com `t3.small x2` na conta `074994084847`, e o `kube-prometheus-stack` (~1.0-1.4 GiB RAM no agregado) nao cabe nessa capacidade. A decisao de observabilidade vigente e a do metrics-server (free-tier-first).
+> Motivo: este documento assumia node group `t3.medium x2` e a conta AWS `654654554686` (ambos desatualizados). O cluster real foi provisionado com `t3.small x2` (depois ajustado para 4x `t3.small`, ainda 2 GiB RAM por node) na conta `074994084847`, e o `kube-prometheus-stack` (~1.0-1.4 GiB RAM no agregado) nao cabe nessa capacidade sem escalar o node group ou trocar a classe de instancia. A decisao de observabilidade vigente e a do metrics-server (free-tier-first), que cabe no orcamento de recursos do cluster atual. Este arquivo e mantido (nao renomeado) como registro historico da analise; nenhuma decisao deste documento deve ser implementada.
 
-**Status:** Superseded by ADR-0007-observabilidade-free-tier-metrics-server
-**Data:** 2026-05-27
+**Status:** Superseded by ADR-0007 (free-tier) — `ADR-0007-observabilidade-free-tier-metrics-server.md`
+**Data:** 2026-05-27 (supersedida em 2026-05-30)
 **Autores:** [Architect Agent]
 
 ## Contexto

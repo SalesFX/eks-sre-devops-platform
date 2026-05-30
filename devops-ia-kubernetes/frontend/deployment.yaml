@@ -11,6 +11,7 @@ metadata:
     environment: production
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app.kubernetes.io/name: frontend
@@ -30,6 +31,15 @@ spec:
         app.kubernetes.io/managed-by: kubectl
         environment: production
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: frontend
+                topologyKey: kubernetes.io/hostname
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
