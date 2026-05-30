@@ -1,6 +1,10 @@
 # ADR-0007: Observabilidade com kube-prometheus-stack
 
-**Status:** Proposed
+> **ARCHIVED:** Esta ADR foi supersedida. Consulte ADR-0007-observabilidade-free-tier-metrics-server.md
+>
+> Motivo: este documento assumia node group `t3.medium x2` e a conta AWS `654654554686` (ambos desatualizados). O cluster real foi provisionado com `t3.small x2` na conta `074994084847`, e o `kube-prometheus-stack` (~1.0-1.4 GiB RAM no agregado) nao cabe nessa capacidade. A decisao de observabilidade vigente e a do metrics-server (free-tier-first).
+
+**Status:** Superseded by ADR-0007-observabilidade-free-tier-metrics-server
 **Data:** 2026-05-27
 **Autores:** [Architect Agent]
 

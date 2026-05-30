@@ -30,20 +30,41 @@ spec:
         app.kubernetes.io/managed-by: kubectl
         environment: production
     spec:
-      automountServiceAccountToken: false
+      automountServiceAccountToken: true
+      serviceAccountName: backend
       securityContext:
         runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: backend
           image: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
           imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3001"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: jwt-secret
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: db-host
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: database-url
           ports:
-            - containerPort: 8080
+            - containerPort: 3001
               protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
@@ -61,16 +82,16 @@ spec:
           readinessProbe:
             httpGet:
               path: /backend/health
-              port: 8080
-            initialDelaySeconds: 5
+              port: 3001
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /backend/health
-              port: 8080
-            initialDelaySeconds: 15
+              port: 3001
+            initialDelaySeconds: 20
             periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 3

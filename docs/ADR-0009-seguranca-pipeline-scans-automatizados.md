@@ -9,23 +9,35 @@
 
 > **Veredicto:** Viável agora — 100% executado nos runners do GitHub Actions, **zero impacto** nos nodes EKS.
 >
-> Justificativa: validado via `aws-mcp` que o caminho recomendado pela AWS para scan de containers em pipeline é Trivy/Inspector em build-time (CodeBuild/Actions), antes do push para o ECR. Todos os scanners citados (Trivy, Gitleaks, Checkov, Semgrep CE, npm audit, dotnet list package --vulnerable) são open source ou têm tiers gratuitos. GitHub Actions free tier para repositórios **públicos** = ilimitado em minutos; para **privados** = 2.000 min/mês na conta Free. SARIF upload para GitHub Security tab é gratuito em repositórios públicos e incluso no GitHub Advanced Security em privados (este projeto, conforme [[ADR-0005]], está em repo público `SalesFX/aws-devops-platform`).
+> Justificativa: validado via `aws-mcp` que o caminho recomendado pela AWS para scan de containers em pipeline é Trivy/Inspector em build-time (CodeBuild/Actions), antes do push para o ECR. Todos os scanners citados (Trivy, Gitleaks, Checkov, Semgrep CE, npm audit) são open source ou têm tiers gratuitos. GitHub Actions free tier para repositórios **públicos** = ilimitado em minutos; para **privados** = 2.000 min/mês na conta Free. SARIF upload para GitHub Security tab é gratuito em repositórios públicos e incluso no GitHub Advanced Security em privados (este projeto, conforme [[ADR-0005]], está em repo público `SalesFX/aws-devops-platform`).
 
 ## Contexto
 
-A pipeline atual ([[ADR-0005]]) faz build do backend (.NET) e frontend (Next.js), push para ECR (`devops-ia/production/{backend,frontend}`) e atualiza `kustomization.yaml` para o ArgoCD sincronizar. Hoje **nenhum scan automatizado** roda antes do push:
+A pipeline atual ([[ADR-0005]]) faz build do backend (Node.js 20 + Express + TypeScript + Prisma) e frontend (Next.js 14), push para ECR (`devops-ia/production/{backend,frontend}`) e atualiza `kustomization.yaml` para o ArgoCD sincronizar. Hoje **nenhum scan automatizado** roda antes do push:
+
+> **Nota de migracao (2026-05-30)**: o backend era .NET 8 e foi migrado para Node.js. Esta ADR foi revisada para remover as ferramentas especificas de .NET (`dotnet list package --vulnerable`, `dotnet-outdated`) e adotar o toolchain de scan do ecossistema Node.js/TypeScript.
 
 1. **Imagens podem ir para o ECR com CVEs CRITICAL conhecidos** — risco de explorar vulnerabilidade em produção via supply chain.
 2. **Segredos podem vazar para o repositório público** sem detecção automática (ex.: AWS Access Keys, JWT secrets, connection strings).
 3. **Terraform pode introduzir misconfiguration** (S3 bucket público acidental, security group `0.0.0.0/0:22`, falta de criptografia em RDS/EBS).
-4. **Dependências vulneráveis** podem ser introduzidas sem sinalização (npm/NuGet package com CVE conhecida).
+4. **Dependências vulneráveis** podem ser introduzidas sem sinalização (npm package com CVE conhecida).
 5. **Não há trilha de auditoria** dos achados ao longo do tempo — sem SARIF agregado.
+
+### Novas superfícies de risco introduzidas pela stack Node.js + Prisma + JWT
+
+A migração para Node.js + Express + Prisma + jsonwebtoken adiciona superfícies de risco que os scanners precisam cobrir explicitamente:
+
+- **SQL injection em `prisma.$queryRaw` / `$executeRaw`**: o Prisma Client é parametrizado por padrão, mas raw queries com interpolação de string (`$queryRawUnsafe`) reintroduzem SQLi. Semgrep `p/nodejs` cobre este padrão.
+- **JWT misconfiguration**: algoritmo `none`, segredo fraco/hardcoded, ausência de verificação de expiração. O `JWT_SECRET` (ver [[ADR-0015]]) vive em K8s Secret `backend-secrets`, nunca em ConfigMap, nunca no Git. Gitleaks deve detectar qualquer vazamento acidental do segredo no repositório.
+- **Prototype pollution**: vulnerabilidade clássica do ecossistema Node.js (objetos manipuláveis via `__proto__`). Coberta por Semgrep `p/nodejs` e por `npm audit` em dependências afetadas.
+- **`DATABASE_URL` em K8s Secret**: a connection string (mesmo com IAM auth, ver [[ADR-0014]]) é montada via `secretKeyRef` no Secret `backend-secrets`. Gitleaks com regra para `postgresql://` evita vazamento da string no Git.
 
 O cluster está em `t3.micro x2` (restrição free tier), então toda a estratégia precisa **rodar nos runners do GitHub**, não no cluster. Felizmente esse é o padrão correto de "shift-left security" — scans devem rodar **antes** do deploy, não em runtime.
 
 ### Validações via MCP
 
 - **aws-mcp** — [Scanning images with Trivy](https://aws.amazon.com/blogs/containers/scanning-images-with-trivy-in-an-aws-codepipeline/): a AWS recomenda explicitamente Trivy como scanner de container em pipelines, com política de bloqueio em CRITICAL. O padrão valida que push para o ECR **só ocorre** se o scan passar.
+- **Imagem base Node.js**: o backend usa `node:20-alpine` como base. Alpine (musl libc, ~5 MiB de base) tem superfície de ataque significativamente menor que `node:20` (Debian, ~350 MiB com glibc e utilitários do sistema), reduzindo o número de CVEs de SO reportados pelo Trivy. Trade-off conhecido: musl pode exigir cuidado com binários nativos (ex.: o engine do Prisma já distribui binários `linux-musl` compatíveis). O scan Trivy `image` cobre tanto camadas de SO quanto pacotes npm da imagem final.
 - **aws-mcp** — [Amazon Inspector for ECR](https://aws.amazon.com/inspector/faqs/): Amazon Inspector oferece scan automático de imagens no ECR pós-push (Enhanced scanning), com custo de **US$ 0,09 por imagem inicial + US$ 0,01 por re-scan**. Para 2 imagens × ~30 pushes/mês = US$ 6/mês. **Decisão**: usar Trivy pré-push (gratuito, bloqueia antes); Inspector pós-push fica como roadmap.
 - **terraform-mcp** — Checkov tem provider Terraform oficial (`bridgecrew/checkov` em registries) e GitHub Action mantida (`bridgecrewio/checkov-action`). Validado em projeto Terraform com providers `hashicorp/aws ~> 6.0`.
 - **GitHub Actions**:
@@ -43,12 +55,12 @@ Implementar um workflow consolidado **`security-scans.yml`** no GitHub Actions q
 
 | Categoria | Ferramenta | Escopo | Trigger | Severidade que bloqueia |
 |---|---|---|---|---|
-| **Container scan** | `aquasecurity/trivy-action@0.24.0` | Imagens backend (.NET) e frontend (Next.js) pós-build, antes do push para ECR | PR → main, push → main | `CRITICAL` |
-| **SCA — Frontend** | `npm audit --audit-level=high` + Trivy `fs` scan | `devops-ia-apps/frontend/package-lock.json` | PR → main, push → main | `CRITICAL` (HIGH = warning) |
-| **SCA — Backend** | `dotnet list package --vulnerable --include-transitive` + Trivy `fs` | `devops-ia-apps/backend/*.csproj` | PR → main, push → main | `CRITICAL` (HIGH = warning) |
+| **Container scan** | `aquasecurity/trivy-action@0.24.0` | Imagens backend (Node.js Alpine) e frontend (Next.js Alpine) pós-build, antes do push para ECR | PR → main, push → main | `CRITICAL` |
+| **SCA — Frontend** | `npm audit --audit-level=high` + Trivy `fs` scan | `devops-ia-apps/frontend/devops-ia-platform/package-lock.json` | PR → main, push → main | `CRITICAL` (HIGH = warning) |
+| **SCA — Backend** | `npm audit --audit-level=high` + Trivy `fs --scanners vuln` | `devops-ia-apps/backend/package-lock.json` | PR → main, push → main | `CRITICAL` (HIGH = warning) |
 | **IaC scan** | `bridgecrewio/checkov-action@v12` | `devops-ia-terraform/**/*.tf` | PR → main, push → main em path filter `devops-ia-terraform/**` | severidade `HIGH`/`CRITICAL` em recursos AWS |
-| **Secret scan** | `gitleaks/gitleaks-action@v2` | Repo inteiro + commits do PR | PR → main, push → main, schedule diário | qualquer detecção real (com allowlist) |
-| **SAST (código)** | `semgrep/semgrep-action@v1` com ruleset `p/owasp-top-ten`, `p/csharp`, `p/typescript` | `devops-ia-apps/**` | PR → main, push → main | `ERROR` (severidade Semgrep) |
+| **Secret scan** | `gitleaks/gitleaks-action@v2` | Repo inteiro + commits do PR (regras para `JWT_SECRET`, `postgresql://`) | PR → main, push → main, schedule diário | qualquer detecção real (com allowlist) |
+| **SAST (código)** | `semgrep/semgrep-action@v1` com rulesets `p/owasp-top-ten`, `p/typescript`, `p/nodejs` (SQLi em Prisma raw, JWT misconfig, prototype pollution) | `devops-ia-apps/**` | PR → main, push → main | `ERROR` (severidade Semgrep) |
 | **K8s manifest scan** | `bridgecrewio/checkov-action@v12` com framework `kubernetes` | `devops-ia-kubernetes/**/*.yaml` | PR → main, push → main em path filter | `HIGH`/`CRITICAL` |
 
 ### Política de severidade (decidida)
@@ -73,11 +85,11 @@ Jobs em security-scans.yml (rodam em paralelo onde possível):
   - iac-tf-scan        (Checkov terraform, path filter)
   - iac-k8s-scan       (Checkov kubernetes, path filter)
   - sast-frontend      (Semgrep p/typescript + p/owasp-top-ten)
-  - sast-backend       (Semgrep p/csharp + p/owasp-top-ten)
-  - sca-frontend       (npm audit + trivy fs)
-  - sca-backend        (dotnet list + trivy fs)
+  - sast-backend       (Semgrep p/typescript + p/nodejs + p/owasp-top-ten)
+  - sca-frontend       (npm audit --audit-level=high + trivy fs)
+  - sca-backend        (npm audit --audit-level=high + trivy fs --scanners vuln)
   - container-frontend (trivy image — depende do build-frontend de ci-build-push)
-  - container-backend  (trivy image — depende do build-backend de ci-build-push)
+  - container-backend  (trivy image node:20-alpine, depende do build-backend de ci-build-push)
 
 Cada job:
   - upload-artifact: <tool>.sarif
@@ -110,7 +122,7 @@ Cada job:
 - aquasecurity/trivy-action@0.24.0   # severity CRITICAL,HIGH; exit-code 1 só em CRITICAL
 - bridgecrewio/checkov-action@v12    # frameworks: terraform,kubernetes,dockerfile,secrets
 - gitleaks/gitleaks-action@v2        # GITLEAKS_LICENSE não necessário em repo público
-- returntocorp/semgrep-action@v1     # rulesets: p/owasp-top-ten + p/csharp + p/typescript
+- returntocorp/semgrep-action@v1     # rulesets: p/owasp-top-ten + p/typescript + p/nodejs
 - github/codeql-action/upload-sarif@v3
 ```
 

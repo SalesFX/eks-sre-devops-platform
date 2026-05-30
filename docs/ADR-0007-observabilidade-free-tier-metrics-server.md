@@ -1,10 +1,10 @@
-# ADR-0007: Observabilidade Free Tier — metrics-server e evolução futura
+# ADR-0007: Observabilidade Free Tier com metrics-server e evolução futura
 
-**Status:** Proposed
+**Status:** Accepted
 **Data:** 2026-05-27
 **Autores:** [Architect Agent]
 
-> Nota de relação com outras ADRs: este documento substitui (supersedes) o ADR anterior `ADR-0007-observabilidade-kube-prometheus-stack.md`, que ainda estava em status `Proposed` e assumia node group `t3.medium x2`. Uma vez que o cluster real foi provisionado com `t3.micro x2`, a decisão original tornou-se inexequível e precisa ser substituída. O ADR antigo deve ser marcado como `Superseded by ADR-0007 (free-tier)` ao ser revisitado.
+> Nota de relação com outras ADRs: este documento substitui (supersedes) o ADR anterior `ADR-0007-observabilidade-kube-prometheus-stack.md`, que assumia node group `t3.medium x2` e conta `654654554686`. O cluster real foi provisionado com `t3.small x2` na conta `074994084847`, tornando a decisão original (kube-prometheus-stack) inexequível por capacidade. O ADR antigo está marcado como `Superseded by ADR-0007-observabilidade-free-tier-metrics-server`.
 
 ## Contexto
 
@@ -12,24 +12,24 @@ A plataforma EKS `devops-ia-production` (us-east-1, conforme ADR-0003) precisa d
 
 ### Restrição crítica de capacidade
 
-O cluster está provisionado com **2 nodes `t3.micro`** (1 vCPU, 1 GiB RAM cada). Após o overhead obrigatório de cada node, sobra muito pouca capacidade utilizável:
+O cluster está provisionado com **2 nodes `t3.small`** (2 vCPU, 2 GiB RAM cada, conforme `02-eks-stack-ai/envs/production.tfvars`). Após o overhead obrigatório de cada node, ainda sobra capacidade utilizável apertada:
 
 | Componente já residente | Memória aproximada |
 |---|---|
 | Sistema EKS (kubelet, kube-proxy, aws-node/VPC CNI, CoreDNS) | ~250–350 MiB por node |
 | Reserva do kubelet (`kube-reserved`, `system-reserved`, `eviction-hard`) | ~100–200 MiB por node |
 | ArgoCD (ADR-0006) | ~250–400 MiB no agregado |
-| Ingress Controller (nginx ou AWS LBC) | ~100–200 MiB no agregado |
-| Frontend Next.js + Backend .NET (2 réplicas cada) | ~300–500 MiB no agregado |
+| Ingress Controller (AWS LBC) | ~100–200 MiB no agregado |
+| Frontend Next.js + Backend Node.js (2 réplicas cada) | ~300–500 MiB no agregado |
 
-Disponível para novas cargas operacionais: estimado em **~100–250 MiB de RAM livre no agregado dos 2 nodes**. Subir `kube-prometheus-stack` (Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics + Operator), que consome ~1.0–1.4 GiB no agregado, causaria **OOMKill em cadeia** e instabilidade dos pods de aplicação — confirmado pelos requisitos publicados pela comunidade Prometheus e pela orientação da AWS sobre node efficiency.
+Com `t3.small x2` (4 GiB RAM total agregado contra 2 GiB dos antigos `t3.micro`), o espaço livre estimado é da ordem de **~1.0–1.5 GiB no agregado**. Ainda assim, subir `kube-prometheus-stack` completo (Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics + Operator), que consome ~1.0–1.4 GiB no agregado, deixaria a margem perigosamente próxima de zero e disputaria RAM com o backend Node.js + Prisma e com o Job de migrations (ADR-0016), com risco de **OOMKill em cadeia** sob pico. A decisão free-tier-first do metrics-server permanece válida em `t3.small`; o kube-prometheus-stack continua deferido para o roadmap (gatilho: upgrade para `t3.medium`+ ou node group dedicado).
 
 ### Validações via MCP
 
 - **aws-mcp**: A documentação oficial AWS ([EKS — Kubernetes Metrics Server](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html)) confirma que o `metrics-server` é o caminho recomendado pela AWS para métricas point-in-time de CPU/memória em qualquer cluster EKS, sendo inclusive disponibilizado como **community add-on gerenciado** pela EKS desde 2024. A própria AWS adverte que `metrics-server` "não é uma solução de monitoramento ou análise histórica" — para isso, a recomendação é Container Insights ou Prometheus.
 - **aws-mcp**: A página de pricing do CloudWatch ([Amazon CloudWatch Pricing](https://aws.amazon.com/cloudwatch/pricing/)) confirma que **CloudWatch Container Insights NÃO é incluído no free tier** — é cobrado por métrica custom ingerida e por GB de logs além dos 5 GB/mês gratuitos. Para um cluster com 2 nodes e ~10 pods, o custo estimado é US$ 5–15/mês mesmo no menor modo, o que descarta Container Insights na fase free-tier. O free tier do CloudWatch (5 GB de logs, 10 métricas custom, 10 alarmes, 3 dashboards) é útil apenas para alertas pontuais de infra.
 - **terraform-mcp**: O módulo público mais próximo (`boeboe/metrics-server/helm 0.0.1`) é não-verificado, pouco baixado (119 downloads) e está pinned em `helm provider ~> 2.7.1`. **Recomendação: não usar módulo comunitário**; instalar via Helm chart oficial `metrics-server` do repo `https://kubernetes-sigs.github.io/metrics-server` diretamente com o recurso nativo `helm_release` (provider `hashicorp/helm`), seguindo a regra do projeto de não usar módulos comunitários (`.claude/rules/terraform-naming-conventions.md`).
-- **aws-mcp**: O `metrics-server` em sua configuração padrão consome tipicamente **~50–100 milliCPU e ~30–80 MiB de RAM** por réplica em clusters pequenos — perfeitamente comportável nos `t3.micro` mesmo com `replicas: 1`. Para HA, 2 réplicas podem ser usadas se a capacidade permitir.
+- **aws-mcp**: O `metrics-server` em sua configuração padrão consome tipicamente **~50–100 milliCPU e ~30–80 MiB de RAM** por réplica em clusters pequenos, perfeitamente comportável nos `t3.small` mesmo com `replicas: 1`. Para HA, 2 réplicas podem ser usadas se a capacidade permitir.
 
 ## Decisão
 
@@ -69,7 +69,7 @@ Disponível para novas cargas operacionais: estimado em **~100–250 MiB de RAM 
 
 - Cluster passa a expor métricas point-in-time de CPU/memória para `kubectl top` e HPA imediatamente.
 - Custo direto **US$ 0,00** adicional na fatura AWS.
-- Footprint de ~50–100 MiB no cluster (cabe folgadamente em `t3.micro x2`).
+- Footprint de ~50–100 MiB no cluster (cabe folgadamente em `t3.small x2`).
 - Habilita Horizontal Pod Autoscaler caso seja útil no futuro próximo.
 - Sem dívida operacional: o componente é maduro, mantido pela `kubernetes-sigs`, e é o caminho oficial sugerido pela AWS.
 - Roadmap claro para escalar a observabilidade conforme o cluster crescer.
@@ -87,7 +87,7 @@ Disponível para novas cargas operacionais: estimado em **~100–250 MiB de RAM 
 
 | Alternativa | Custo direto estimado/mês | Footprint cluster | Motivo da rejeição |
 |---|---|---|---|
-| `kube-prometheus-stack` completo agora | ~US$ 2–5 (EBS gp3 20 GiB + ALB compartilhado) | ~1.0–1.4 GiB RAM | **OOM risk crítico** — não cabe em `t3.micro x2`. Inviável até upgrade dos nodes. |
+| `kube-prometheus-stack` completo agora | ~US$ 2–5 (EBS gp3 20 GiB + ALB compartilhado) | ~1.0–1.4 GiB RAM | **OOM risk**: em `t3.small x2` consumiria quase toda a margem livre, disputando RAM com backend Node.js + Prisma. Inviável sem upgrade dos nodes. |
 | CloudWatch Container Insights (mesmo enhanced) | US$ 5–15/mês para 2 nodes + ~10 pods | ~150–250 MiB (CloudWatch agent DaemonSet) | Fora do free tier (validado via aws-mcp). Vendor lock-in e custo recorrente sem necessidade no MVP. |
 | Amazon Managed Prometheus (AMP) + Amazon Managed Grafana (AMG) | ~US$ 9 AMG/usuário + ~US$ 0.30 por 10M métricas AMP | ~50 MiB (apenas scraper) | AMG fora do free-tier (custo por usuário). Excessivo para 2 nodes. |
 | Datadog / New Relic / Grafana Cloud | US$ 15–31/host/mês mínimo | ~100–200 MiB (agent) | Custo SaaS por host. Vendor lock-in. Foge do objetivo open-source/self-hosted do projeto. |
@@ -97,7 +97,7 @@ Disponível para novas cargas operacionais: estimado em **~100–250 MiB de RAM 
 
 A evolução prevista, em fases gatilhadas por sinais operacionais e/ou upgrade da infra:
 
-### Fase 1 — Atual (free-tier, 2x t3.micro)
+### Fase 1 — Atual (free-tier, 2x t3.small)
 - `metrics-server` instalado em `kube-system`.
 - Operação via `kubectl top` + runbook manual.
 - Alertas: nenhum automatizado; checagem manual diária ou ad-hoc.
@@ -110,7 +110,7 @@ A evolução prevista, em fases gatilhadas por sinais operacionais e/ou upgrade 
   - Alertmanager habilitado, mas com webhook único para Slack (sem PagerDuty).
   - kube-state-metrics + node-exporter habilitados.
   - **Sem Thanos, sem Loki, sem Tempo**.
-- ServiceMonitors para backend (.NET via `prometheus-net.AspNetCore`) e frontend (Next.js via `prom-client`).
+- ServiceMonitors para backend (Node.js via `prom-client`) e frontend (Next.js via `prom-client`).
 - Ingress via AWS Load Balancer Controller compartilhado com ArgoCD (TLS via ACM).
 - Footprint esperado: ~0.7–1.0 GiB RAM no agregado.
 - **Gatilho para sair desta fase**: necessidade de retenção > 1 dia OU primeiro post-mortem em que faltou histórico.
@@ -140,7 +140,7 @@ A evolução prevista, em fases gatilhadas por sinais operacionais e/ou upgrade 
 - [ ] PriorityClass `system-cluster-critical` aplicada ao deployment do `metrics-server`
 - [ ] Todos os Deployments do projeto (`backend`, `frontend`, ArgoCD, ingress) com `resources.requests` e `resources.limits` definidos (pré-requisito para `kubectl top` ser interpretável)
 - [ ] Runbook publicado em `docs/runbooks/observability-free-tier.md` com comandos e thresholds
-- [ ] ADR-0007 anterior (`observabilidade-kube-prometheus-stack`) marcado como `Superseded by ADR-0007 (free-tier)` para evitar ambiguidade
+- [x] ADR-0007 anterior (`observabilidade-kube-prometheus-stack`) marcado como `Superseded by ADR-0007-observabilidade-free-tier-metrics-server` para evitar ambiguidade
 - [ ] Documentado o gatilho explícito para promover à Fase 2 do roadmap (upgrade de nodes ou 3+ incidentes/semana)
 
 ## Referências

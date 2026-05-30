@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: devops-ia
+    app.kubernetes.io/managed-by: argocd
+    environment: production
+data:
+  db-host: "devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com"

@@ -2,6 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+- backend/serviceaccount.yaml
+- backend/configmap.yaml
+- backend/migration-job.yaml
 - backend/deployment.yaml
 - backend/service.yaml
 - backend/pdb.yaml
@@ -13,10 +16,10 @@ resources:
 images:
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
-  newTag: sha-0081eb2
+  newTag: sha-a15a281-r3
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
-  newTag: sha-1960a63
+  newTag: sha-a15a281
 
 commonLabels:
   app.kubernetes.io/part-of: devops-ia

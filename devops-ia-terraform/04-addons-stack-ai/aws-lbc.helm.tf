@@ -52,7 +52,7 @@ resource "helm_release" "aws_load_balancer_controller" {
     # evitar o erro: "failed to fetch VPC ID from instance metadata: 401".
     {
       name  = "vpcId"
-      value = "vpc-0ca452cff561bdf41"
+      value = local.vpc_id
     },
     {
       name  = "region"

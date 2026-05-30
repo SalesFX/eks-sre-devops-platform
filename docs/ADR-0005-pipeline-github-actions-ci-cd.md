@@ -9,8 +9,10 @@ Approved
 ## Contexto
 
 O projeto `devops-ia` possui duas aplicacoes que precisam de automacao de CI/CD:
-- **Backend**: .NET 8 (ASP.NET Core), localizado em `devops-ia-apps/backend/YoutubeLiveApp/`
-- **Frontend**: Next.js (Node 20), localizado em `devops-ia-apps/frontend/youtube-live-app/`
+- **Backend**: Node.js 20 + Express + TypeScript + Prisma, localizado em `devops-ia-apps/backend/`
+- **Frontend**: Next.js 14 (Node 20), localizado em `devops-ia-apps/frontend/devops-ia-platform/`
+
+> **Nota de migracao de stack (2026-05-30)**: O backend era originalmente .NET 8 (placeholder WeatherForecast, sem banco). Foi migrado integralmente para Node.js + Express + TypeScript + Prisma + jsonwebtoken + bcryptjs + zod, com a aplicacao real Incident Tracker. As etapas de CI desta ADR (build, SCA, SAST) foram revisadas para refletir o toolchain Node.js. A justificativa arquitetural da migracao (auth JWT, Prisma, RDS) esta registrada nas ADR-0013 a ADR-0017.
 
 Ambas as aplicacoes ja possuem Dockerfiles otimizados (multi-stage, alpine, rootless, healthcheck) e repositorios ECR provisionados:
 - `654654554686.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend`
@@ -144,7 +146,8 @@ flowchart TD
     B -->|"both changed"| C
     B -->|"both changed"| D
 
-    C --> E["Docker Build<br/>.NET 8 Alpine"]
+    C --> CT["npm ci && npm run build<br/>npm audit --audit-level=high<br/>Semgrep p/typescript + p/nodejs"]
+    CT --> E["Docker Build<br/>node:20-alpine"]
     E --> F["ECR Push<br/>backend:sha-abc1234"]
 
     D --> G["Docker Build<br/>Next.js Alpine"]
@@ -156,7 +159,8 @@ flowchart TD
     I --> J["Edit kustomization.yaml<br/>newTag: sha-abc1234"]
     J --> K["Git commit + push"]
     K --> L["ArgoCD detects change<br/>(ADR-0006)"]
-    L --> M["ArgoCD syncs to EKS"]
+    L --> MIG["PreSync Hook Job<br/>prisma migrate deploy<br/>(ADR-0016)"]
+    MIG --> M["ArgoCD syncs to EKS"]
 ```
 
 ```mermaid
@@ -220,13 +224,19 @@ graph LR
      - Condicional: `if: needs.detect-changes.outputs.backend_changed == 'true'` (e similar para frontend)
      - Steps:
        a. `actions/checkout@v4`
-       b. `aws-actions/configure-aws-credentials@v4` com OIDC (role ARN do ADR-0004)
-       c. `aws-actions/amazon-ecr-login@v2`
-       d. Docker build com tag `sha-${{ github.sha }}` (7 chars)
-       e. Docker push para ECR
+       b. `actions/setup-node@v4` com `node-version: 20` e cache `npm`
+       c. `npm ci` (instala dependencias a partir do `package-lock.json`)
+       d. `npm run build` (backend: `tsc` gera `dist/`; frontend: `next build`)
+       e. `npm audit --audit-level=high` (SCA, ver ADR-0009; HIGH = warning, CRITICAL = bloqueio)
+       f. Semgrep com rulesets `p/typescript` e `p/nodejs` (SAST, ver ADR-0009)
+       g. `aws-actions/configure-aws-credentials@v4` com OIDC (role ARN do ADR-0004)
+       h. `aws-actions/amazon-ecr-login@v2`
+       i. Docker build com tag `sha-${{ github.sha }}` (7 chars)
+       j. Docker push para ECR
      - Configuracao do build context:
-       - Backend: `devops-ia-apps/backend/YoutubeLiveApp/`
-       - Frontend: `devops-ia-apps/frontend/youtube-live-app/`
+       - Backend: `devops-ia-apps/backend/`
+       - Frontend: `devops-ia-apps/frontend/devops-ia-platform/`
+     - Nota: o backend gera o Prisma Client em build time (`npx prisma generate`, normalmente via script `postinstall` ou step no Dockerfile multi-stage). O `prisma migrate deploy` NAO roda neste job (ver ADR-0016) -- migrations sao aplicadas via PreSync hook do ArgoCD.
 
   3. **Job `update-kustomization`**:
      - `needs: build-push`
@@ -240,18 +250,23 @@ graph LR
        g. `git push origin main`
      - Nota: `[skip ci]` no commit message previne loop infinito (funcionalidade nativa do GitHub Actions)
 
+- **Database migrations (etapa separada, fora do CI)**:
+  - As migrations Prisma **nao** rodam como step do GitHub Actions. A decisao (ADR-0016) e executa-las como **ArgoCD PreSync hook Job** (`prisma migrate deploy`), antes do ArgoCD aplicar os novos Deployments.
+  - Motivo: manter o ciclo GitOps coeso e evitar que o runner de CI tenha acesso de rede ao banco de producao. O Job roda dentro do cluster, com acesso ao RDS via IRSA (ADR-0014), usando a mesma imagem do backend (que ja contem o Prisma Client e o schema).
+  - Sequencia efetiva: `push -> build/test/scan -> push ECR -> commit kustomization -> ArgoCD detecta -> PreSync Job (migrate deploy) -> ArgoCD sync dos Deployments`.
+
 - **Tag strategy**: `sha-$(echo ${{ github.sha }} | cut -c1-7)` -- 7 caracteres do SHA do commit
 
-- **ECR image URIs**:
-  - Backend: `654654554686.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend:sha-<hash>`
-  - Frontend: `654654554686.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend:sha-<hash>`
+- **ECR image URIs** (conta AWS `074994084847`, regiao `us-east-1`):
+  - Backend: `074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend:sha-<hash>`
+  - Frontend: `074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend:sha-<hash>`
 
 - **Kustomization update**: O bloco `images` no `kustomization.yaml` deve ter o `newTag` atualizado para o SHA curto do commit
 
 - **Environment variables / Secrets necessarios**:
   - `AWS_REGION`: `us-east-1` (pode ser hardcoded ou var de ambiente)
   - `AWS_ROLE_ARN`: ARN da role criada no ADR-0004 (armazenar como GitHub Actions variable ou secret)
-  - `ECR_REGISTRY`: `654654554686.dkr.ecr.us-east-1.amazonaws.com`
+  - `ECR_REGISTRY`: `074994084847.dkr.ecr.us-east-1.amazonaws.com`
   - Nenhum secret de credencial AWS necessario (OIDC)
 
 - **Validacoes pos-deploy**:
@@ -259,7 +274,7 @@ graph LR
   - Verificar se o commit do kustomization foi feito: `git log -1 --oneline`
   - Verificar se o GitHub Actions workflow executou com sucesso: `gh run list`
 
-- **Rollback strategy**: Reverter o commit do kustomization (git revert) para voltar a tag anterior. O ArgoCD detectara a mudanca e fara rollback automatico.
+- **Rollback strategy**: Reverter o commit do kustomization (git revert) para voltar a tag anterior. O ArgoCD detectara a mudanca e fara rollback automatico da imagem. Atencao: o rollback de imagem **nao reverte o schema do banco** -- migrations sao forward-only via `prisma migrate deploy`. Por isso a ADR-0016 adota a estrategia expand/contract (ADDs antes, DROPs apenas apos versao estavel), garantindo que a imagem anterior continue compativel com o schema migrado.
 
 ## Observabilidade e Day-2
 

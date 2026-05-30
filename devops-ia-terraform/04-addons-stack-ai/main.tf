@@ -31,3 +31,16 @@ data "aws_eks_cluster" "this" {
 data "aws_eks_cluster_auth" "this" {
   name = var.cluster.name
 }
+
+data "terraform_remote_state" "networking" {
+  backend = "s3"
+  config = {
+    bucket = "devops-ia-production-terraform-state-074994084847"
+    key    = "networking/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+locals {
+  vpc_id = data.terraform_remote_state.networking.outputs.vpc_id
+}

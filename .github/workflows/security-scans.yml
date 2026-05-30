@@ -112,7 +112,8 @@ jobs:
           python3 -m pip install semgrep --quiet
           semgrep scan \
             --config p/owasp-top-ten \
-            --config p/csharp \
+            --config p/typescript \
+            --config p/nodejs \
             --sarif \
             --output semgrep.sarif \
             devops-ia-apps/backend || true
@@ -170,33 +171,26 @@ jobs:
           category: trivy-fs-frontend
 
   sca-backend:
-    name: Backend SCA (.NET audit + Trivy)
+    name: Backend SCA (npm audit + Trivy)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK 8
-        uses: actions/setup-dotnet@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
-          dotnet-version: "8.0.x"
+          node-version: "20"
 
-      - name: Restore backend packages
-        working-directory: devops-ia-apps/backend/DevopsIaPlatformApi
-        run: dotnet restore
+      - name: Install backend dependencies
+        working-directory: devops-ia-apps/backend
+        run: npm ci
 
-      - name: dotnet list vulnerable packages
-        working-directory: devops-ia-apps/backend/DevopsIaPlatformApi
+      - name: npm audit (CRITICAL blocks, HIGH warns)
+        working-directory: devops-ia-apps/backend
         run: |
-          OUTPUT=$(dotnet list package --vulnerable --include-transitive 2>&1)
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q "Critical"; then
-            echo "::error::CRITICAL vulnerabilities found in .NET packages. Blocking pipeline. (ADR-0009)"
-            exit 1
-          fi
-          if echo "$OUTPUT" | grep -q "High"; then
-            echo "::warning::.NET packages have HIGH vulnerabilities, review required within 7 days (ADR-0009)"
-          fi
+          npm audit --audit-level=critical || exit 1
+          npm audit --audit-level=high || echo "::warning::npm audit found HIGH vulnerabilities, review required within 7 days (ADR-0009)"
 
       - name: Trivy filesystem scan on backend
         uses: aquasecurity/trivy-action@v0.35.0
@@ -270,7 +264,7 @@ jobs:
         run: |
           docker build \
             -t devops-ia/backend:scan \
-            devops-ia-apps/backend/DevopsIaPlatformApi
+            devops-ia-apps/backend
 
       - name: Trivy container scan backend CRITICAL
         uses: aquasecurity/trivy-action@v0.35.0
@@ -317,7 +311,7 @@ jobs:
           echo "| sast-frontend (Semgrep) | ${{ needs.sast-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| sast-backend (Semgrep) | ${{ needs.sast-backend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| sca-frontend (npm audit + Trivy fs) | ${{ needs.sca-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| sca-backend (dotnet audit + Trivy fs) | ${{ needs.sca-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| sca-backend (npm audit + Trivy fs) | ${{ needs.sca-backend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| container-frontend (Trivy image) | ${{ needs.container-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| container-backend (Trivy image) | ${{ needs.container-backend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

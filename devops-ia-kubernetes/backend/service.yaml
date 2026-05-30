@@ -11,7 +11,7 @@ spec:
     app.kubernetes.io/name: backend
     app.kubernetes.io/component: backend
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 3001
+      targetPort: 3001
       protocol: TCP
       name: http

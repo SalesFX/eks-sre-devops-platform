@@ -1,3 +1,5 @@
-export async function GET() {
-  return Response.json({ status: "healthy" });
+import { NextResponse } from 'next/server'
+
+export function GET() {
+  return NextResponse.json({ status: 'ok' })
 }
