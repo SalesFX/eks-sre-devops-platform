@@ -134,7 +134,7 @@ Cada stack e um diretorio independente com seu proprio state remoto no S3. Aplic
 
 ### Stack 00: Remote Backend
 
-Cria o bucket S3 (`devops-ia-production-terraform-state-074994084847`) e a tabela DynamoDB para lock de state. Aplicada uma vez, nunca destruida. Todas as demais stacks apontam para este backend.
+Cria o bucket S3 (`devops-ia-production-terraform-state-<account-id>`) e a tabela DynamoDB para lock de state. Aplicada uma vez, nunca destruida. Todas as demais stacks apontam para este backend.
 
 ### Stack 01: Networking
 
@@ -183,7 +183,7 @@ RDS PostgreSQL 16 (`db.t3.micro`, single-AZ, armazenamento 20 GB gp2) com:
 
 O backend nao usa senha de banco. O fluxo completo:
 
-1. O pod do backend tem o ServiceAccount `backend` anotado com `eks.amazonaws.com/role-arn: arn:aws:iam::074994084847:role/devops-ia-production-backend-irsa`
+1. O pod do backend tem o ServiceAccount `backend` anotado com `eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/devops-ia-production-backend-irsa`
 2. O EKS injeta um token OIDC no pod via `automountServiceAccountToken: true`
 3. `src/lib/prisma.ts` usa `@aws-sdk/rds-signer` para gerar um token IAM assinado (SigV4) valido por 15 minutos
 4. O Prisma conecta ao banco com `postgresql://app_user:<token>@<host>:5432/devops_ia?sslmode=require`
@@ -444,19 +444,21 @@ kubectl create secret generic grafana-admin-secret \
 
 ## Dados do ambiente
 
+Os valores reais estao nos outputs do Terraform (`terraform output` em cada stack). Os ARNs e URIs abaixo usam `<account-id>` como placeholder — substitua pelo ID da sua conta ao reproduzir o ambiente.
+
 | Item | Valor |
 |---|---|
-| Conta AWS | `074994084847` |
+| Conta AWS | `<account-id>` |
 | Regiao | `us-east-1` |
 | Cluster EKS | `devops-ia-production` |
 | ALB endpoint | `k8s-app-devopsia-a05a05588d-34662498.us-east-1.elb.amazonaws.com` |
-| RDS endpoint | `devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com:5432` |
+| RDS endpoint | `<rds-endpoint>.us-east-1.rds.amazonaws.com:5432` |
 | Banco | `devops_ia` |
-| ECR backend | `074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend` |
-| ECR frontend | `074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend` |
-| GitHub Actions role | `arn:aws:iam::074994084847:role/devops-ia-production-github-actions` |
-| Backend IRSA role | `arn:aws:iam::074994084847:role/devops-ia-production-backend-irsa` |
-| EBS CSI IRSA role | `arn:aws:iam::074994084847:role/devops-ia-production-ebs-csi` |
+| ECR backend | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend` |
+| ECR frontend | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend` |
+| GitHub Actions role | `arn:aws:iam::<account-id>:role/devops-ia-production-github-actions` |
+| Backend IRSA role | `arn:aws:iam::<account-id>:role/devops-ia-production-backend-irsa` |
+| EBS CSI IRSA role | `arn:aws:iam::<account-id>:role/devops-ia-production-ebs-csi` |
 
 ## ADRs (Architecture Decision Records)
 
