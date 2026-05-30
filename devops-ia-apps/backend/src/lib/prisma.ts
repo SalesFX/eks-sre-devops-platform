@@ -97,7 +97,7 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
         '[prisma] Client not yet initialised. Await `ready` before using `prisma` synchronously.',
       )
     }
-    const value = (prismaExports.prisma as Record<string | symbol, unknown>)[prop]
+    const value = (prismaExports.prisma as unknown as Record<string | symbol, unknown>)[prop]
     if (typeof value === 'function') {
       return (value as Function).bind(prismaExports.prisma)
     }

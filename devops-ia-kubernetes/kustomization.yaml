@@ -16,7 +16,7 @@ resources:
 images:
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
-  newTag: sha-a15a281-r3
+  newTag: sha-776cf66
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
   newTag: sha-a15a281
