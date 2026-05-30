@@ -31,3 +31,11 @@ variable "aws_lbc" {
   })
   nullable = false
 }
+
+variable "ebs_csi" {
+  description = "Configurações do EKS managed addon do EBS CSI Driver."
+  type = object({
+    addon_version = string
+  })
+  nullable = false
+}

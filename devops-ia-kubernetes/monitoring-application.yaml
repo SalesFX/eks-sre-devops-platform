@@ -25,7 +25,7 @@ spec:
                 memory: "512Mi"
                 cpu: "500m"
             storage:
-              storageClassName: gp2
+              storageClassName: gp3
               accessModes:
                 - ReadWriteOnce
               resources:

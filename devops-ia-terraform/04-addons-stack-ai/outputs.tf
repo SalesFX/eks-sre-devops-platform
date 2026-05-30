@@ -7,3 +7,8 @@ output "aws_lbc_role_arn" {
   description = "ARN da IAM role IRSA criada para o AWS Load Balancer Controller."
   value       = aws_iam_role.aws_lbc.arn
 }
+
+output "ebs_csi_role_arn" {
+  description = "ARN do IAM role IRSA do EBS CSI Driver."
+  value       = aws_iam_role.ebs_csi.arn
+}
