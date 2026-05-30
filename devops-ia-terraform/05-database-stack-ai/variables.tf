@@ -38,3 +38,11 @@ variable "database" {
   })
   nullable = false
 }
+
+variable "alerts" {
+  description = "Configurações de alertas operacionais."
+  type = object({
+    email = string
+  })
+  nullable = false
+}
