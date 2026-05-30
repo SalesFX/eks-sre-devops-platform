@@ -3,10 +3,10 @@ name: Security Scans
 on:
   pull_request:
     branches:
-      - main
+      - clean-main
   push:
     branches:
-      - main
+      - clean-main
 
 permissions:
   security-events: write

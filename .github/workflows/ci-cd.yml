@@ -3,7 +3,7 @@ name: CI/CD
 on:
   push:
     branches:
-      - main
+      - clean-main
     paths:
       - "devops-ia-apps/backend/**"
       - "devops-ia-apps/frontend/**"
@@ -143,5 +143,5 @@ jobs:
           git add devops-ia-kubernetes/kustomization.yaml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "ci: update image tags to ${{ steps.meta.outputs.tag }} [skip ci]"
-          git pull --rebase origin main
-          git push origin main
+          git pull --rebase origin clean-main
+          git push origin clean-main
