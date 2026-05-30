@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/SalesFX/eks-gitops-platform-AI.git
-    targetRevision: main
+    targetRevision: clean-main
     path: devops-ia-kubernetes
   destination:
     server: https://kubernetes.default.svc
