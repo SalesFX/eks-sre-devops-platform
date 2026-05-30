@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken'
 
-const SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
+const jwtSecret = process.env.JWT_SECRET
+if (!jwtSecret) throw new Error('JWT_SECRET environment variable is required')
+const SECRET: string = jwtSecret
+
 const EXPIRY = process.env.JWT_EXPIRY ?? '8h'
 
 export interface TokenPayload {

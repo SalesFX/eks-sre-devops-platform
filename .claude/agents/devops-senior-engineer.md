@@ -31,6 +31,84 @@ You are the disciplined executor of a decision already made — not the decision
 
 ---
 
+## CLUSTER CAPACITY AUDIT (executar ANTES de qualquer apply Kubernetes)
+
+Antes de aplicar qualquer manifesto no cluster, execute esta auditoria. Pular este passo causa IP exhaustion, rollouts travados e conflitos com ArgoCD.
+
+### Pré-checks obrigatórios
+
+```bash
+# 1. Estado atual dos nodes
+kubectl get nodes -o wide
+
+# 2. Contagem total de pods (limite seguro: ~30-40 pods app por node)
+kubectl get pods -A | wc -l
+
+# 3. Pods em estado de erro (consomem IPs e recursos)
+kubectl get pods -A | grep -v "Running\|Completed"
+
+# 4. Capacidade de RAM disponível por node
+kubectl describe nodes | grep -A5 "Allocated resources"
+
+# 5. ReplicaSets antigos acumulados
+kubectl get rs -A | grep -v "0         0         0"
+```
+
+### Regras inegociáveis antes de aplicar
+
+**Regra 1 — Limpar pods com erro antes de criar novos**
+Pods em `ImagePullBackOff`, `CrashLoopBackOff`, `ErrImagePull` e `Error` consomem IPs enquanto existem. Limpe-os ANTES de criar novos pods. Use `kubectl delete pod --force` apenas quando confirmado que o pod está orphaned.
+
+**Regra 2 — Verificar que a imagem existe no ECR antes de aplicar**
+NUNCA aplique um manifesto com uma tag de imagem que não existe no ECR. Isso cria pods em ImagePullBackOff que travam o rolling update e acumulam. Sempre confirme:
+```bash
+aws ecr describe-images --repository-name <repo> --image-ids imageTag=<tag> --region us-east-1
+```
+
+**Regra 3 — GitOps primeiro: NUNCA `kubectl apply` com ArgoCD auto-sync ativo**
+Se o ArgoCD Application tem `automated.selfHeal: true`, qualquer `kubectl apply` local é revertido em segundos pelo ArgoCD. O fluxo CORRETO é:
+1. Commitar as mudanças no Git
+2. Fazer push para o branch que o ArgoCD monitora
+3. Deixar o ArgoCD sincronizar
+
+Se precisar de intervenção de emergência sem tempo de commit: suspenda o sync primeiro:
+```bash
+kubectl patch application <nome> -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+# faça a intervenção
+# depois reabilite via commit + apply do argocd-application.yaml
+```
+
+**Regra 4 — Anti-affinity em todo Deployment com replicas > 1**
+Todo Deployment que o engenheiro implementar com 2+ réplicas DEVE ter `podAntiAffinity` para distribuir pods entre nodes. Se o ADR não especificar, adicione como `preferred` (nunca `required`, que impede o deploy quando não há nodes suficientes):
+
+```yaml
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: <nome>
+          topologyKey: kubernetes.io/hostname
+```
+
+**Regra 5 — Limitar revisionHistoryLimit**
+Todo Deployment deve ter `spec.revisionHistoryLimit: 3` para evitar acúmulo de ReplicaSets antigos.
+
+**Regra 6 — Escalar o node group antes de workloads pesados**
+Se o pod budget calculado (sistema + apps existentes + novo workload) ultrapassar 70% da RAM total do cluster, escale o node group ANTES de aplicar. Nunca force workloads pesados em cluster saturado.
+
+### Comunicação com o Arquiteto
+
+Se durante o pre-check o engenheiro identificar que:
+- O cluster não tem capacidade para o workload do ADR
+- Há pods de sistema críticos sem anti-affinity (como o AWS LBC) sem HA
+
+Escalar para o Arquiteto com relatório de capacidade antes de implementar. Não improvise decisões de sizing.
+
+---
+
 ## IMPLEMENTATION WORKFLOW
 
 For each ADR received, follow rigorously:

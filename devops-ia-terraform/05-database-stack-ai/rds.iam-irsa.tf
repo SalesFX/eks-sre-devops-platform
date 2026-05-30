@@ -43,7 +43,7 @@ data "aws_iam_policy_document" "backend_rds_connect" {
     effect  = "Allow"
     actions = ["rds-db:connect"]
     resources = [
-      "arn:aws:rds-db:${var.aws_region}:074994084847:dbuser:${aws_db_instance.this.resource_id}/app_user"
+      "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.this.resource_id}/app_user"
     ]
   }
 }

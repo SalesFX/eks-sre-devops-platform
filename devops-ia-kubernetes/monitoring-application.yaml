@@ -43,7 +43,10 @@ spec:
 
         grafana:
           enabled: true
-          adminPassword: "devops-ia-2026"
+          admin:
+            existingSecret: grafana-admin-secret
+            userKey: admin-user
+            passwordKey: admin-password
           resources:
             requests:
               memory: "128Mi"

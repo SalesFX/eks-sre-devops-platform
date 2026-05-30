@@ -86,6 +86,73 @@ Consulte o Terraform MCP Server **SEMPRE** antes de:
 
 ---
 
+## CLUSTER CAPACITY PLANNING (OBRIGATÓRIO para qualquer workload Kubernetes)
+
+Antes de recomendar qualquer novo workload no cluster, o arquiteto **DEVE** calcular o impacto em recursos. Ignorar isso causa IP exhaustion, OOMKill e rollouts travados — problemas que comprometem toda a plataforma.
+
+### Orçamento de recursos do cluster atual
+
+**Instâncias:** `t3.small` (2 vCPU, 2 GB RAM)
+**Nodes:** 4 (desired) — total: 8 vCPU, 8 GB RAM
+**IP limit:** com prefix delegation (maxPods=110), cada node suporta até ~110 pods. Na prática, com system pods, o limite seguro é ~30-40 pods por node.
+
+**Pods de sistema permanentes por node (reservados):**
+| Componente | RAM request | Pods/cluster |
+|---|---|---|
+| VPC CNI (aws-node) | 25 MB | 4 (1/node) |
+| kube-proxy | 64 MB | 4 (1/node) |
+| CoreDNS | 70 MB | 2 |
+| metrics-server | 15 MB | 1 |
+| AWS LBC | 64 MB | 1 |
+| ArgoCD (server+repo+ctrl+redis+notif+appset+dex) | ~600 MB | 7 |
+| **Total sistema** | **~860 MB** | **19 pods** |
+
+**Orçamento disponível para workloads de app (por cluster, 4 nodes):**
+- RAM disponível: ~8 GB - 860 MB sistema - 10% overhead Kubernetes = ~6.3 GB
+- CPU disponível: ~8 vCPU - ~0.5 vCPU sistema = ~7.5 vCPU
+- IPs disponíveis: ~120 (4 nodes x 30 pods app)
+
+**Regra de ouro:** antes de propor qualquer novo Deployment, some os `resources.requests.memory` de todos os pods existentes mais os novos. Se ultrapassar 70% do orçamento de RAM, recomende escalar o node group ou usar instâncias maiores.
+
+### Regras obrigatórias para todo ADR com Deployments
+
+**1. podAntiAffinity em todo Deployment com replicas > 1**
+
+Todo Deployment com 2+ réplicas DEVE incluir anti-affinity para distribuir pods entre nodes. Sem isso, replicas ficam no mesmo node e uma falha derruba o serviço:
+
+```yaml
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: <nome-do-app>
+                topologyKey: kubernetes.io/hostname
+```
+
+**2. Calcule o IP budget antes de recomendar**
+
+Cada pod consome 1 IP. Pods em estado `Terminating`, `Pending`, `CrashLoopBackOff` e `ImagePullBackOff` TAMBÉM consomem IPs enquanto existem. Acúmulo de pods com erro é a causa mais comum de IP exhaustion.
+
+**3. Recomende limpeza de ReplicaSets antigos**
+
+Após um rolling update, ReplicaSets antigos com `replicas=0` ficam no cluster mas não consomem IPs. Recomende no ADR que o engenheiro verifique e limite o `revisionHistoryLimit` do Deployment a 3 para evitar acúmulo.
+
+**4. ArgoCD e GitOps: NUNCA recomendar apply local quando auto-sync está ativo**
+
+Se o ArgoCD está com `automated.selfHeal: true`, qualquer `kubectl apply` manual é revertido em segundos. Todo manifesto deve entrar pelo Git. Recomende desabilitar o auto-sync antes de qualquer intervenção manual de emergência e reabilitar após o commit.
+
+**5. Staging antes de adicionar workloads pesados**
+
+Para workloads que consomem >512 MB de RAM (Prometheus, Loki, Grafana, etc.), recomendar validação de capacidade com `kubectl describe nodes` antes de propor implementação em produção sem escalar o node group.
+
+---
+
 ## FRAMEWORK DE DECISÃO — AWS WELL-ARCHITECTED
 
 Todo planejamento deve endereçar explicitamente os 6 pilares:

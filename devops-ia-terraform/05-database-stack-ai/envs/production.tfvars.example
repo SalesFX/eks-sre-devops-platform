@@ -1,0 +1,24 @@
+aws_region = "us-east-1"
+
+project = {
+  name        = "devops-ia"
+  environment = "production"
+}
+
+cluster = {
+  name = "<eks-cluster-name>"
+}
+
+database = {
+  identifier              = "<project>-<environment>"
+  db_name                 = "<database_name>"
+  username                = "<master_username>"
+  engine_version          = "16"
+  instance_class          = "db.t3.micro"
+  allocated_storage       = 20
+  backup_retention_period = 0
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "Mon:04:30-Mon:05:30"
+  deletion_protection     = true
+  skip_final_snapshot     = false
+}

@@ -36,6 +36,10 @@ spec:
         - name: migration
           image: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
           imagePullPolicy: IfNotPresent
+          # prisma db push is used intentionally: no migrations/ directory exists in this portfolio project.
+          # --accept-data-loss is safe here because there is no persistent data to lose.
+          # If migrations are introduced in the future, replace this with:
+          #   npx prisma migrate deploy
           command: ["npx", "prisma", "db", "push", "--skip-generate", "--accept-data-loss"]
           env:
             - name: DATABASE_URL

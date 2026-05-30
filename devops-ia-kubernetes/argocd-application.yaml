@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SalesFX/eks-gitops-platform-AI.git
+    repoURL: https://github.com/SalesFX/eks-sre-devops-platform.git
     targetRevision: clean-main
     path: devops-ia-kubernetes
   destination:

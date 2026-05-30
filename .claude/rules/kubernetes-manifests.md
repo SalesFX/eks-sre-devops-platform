@@ -201,6 +201,36 @@ devops-ia-kubernetes/
 
 **Regra**: um recurso por arquivo. Nomeie o arquivo pelo tipo do recurso em lowercase (ex: `deployment.yaml`, `service.yaml`, `pdb.yaml`, `configmap.yaml`, `ingress.yaml`).
 
+## Pod Anti-Affinity (obrigatório para replicas >= 2)
+
+Todo Deployment com 2 ou mais réplicas deve distribuir pods entre nodes. Sem isso, uma falha de node derruba todas as réplicas ao mesmo tempo.
+
+Use `preferred` (nunca `required`) para não bloquear o deploy quando nodes são insuficientes:
+
+```yaml
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: <nome-da-app>
+                topologyKey: kubernetes.io/hostname
+```
+
+## Revision History Limit
+
+Todo Deployment deve limitar o histórico de ReplicaSets para evitar acúmulo de objetos no cluster:
+
+```yaml
+spec:
+  revisionHistoryLimit: 3
+```
+
 ## Checklist ao Gerar Manifestos
 
 Antes de entregar qualquer manifesto, verifique:
@@ -217,3 +247,5 @@ Antes de entregar qualquer manifesto, verifique:
 - [ ] `imagePullPolicy: IfNotPresent` para tags versionadas
 - [ ] securityContext: runAsNonRoot, allowPrivilegeEscalation: false
 - [ ] Volumes montados com readOnly: true (exceto emptyDir para tmp/cache)
+- [ ] podAntiAffinity com topologyKey hostname (para replicas >= 2)
+- [ ] revisionHistoryLimit: 3

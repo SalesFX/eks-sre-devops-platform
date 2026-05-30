@@ -14,10 +14,12 @@ AWS infrastructure workshop using Terraform and Kubernetes. Stacks are independe
 
 ## Agents
 
-Two specialized agents are defined in `.claude/agents/`:
+Four specialized agents are defined in `.claude/agents/`:
 
 - **`devops-solution-architect`** — Plans architectures and produces ADRs only. Never creates `.tf` files or any infrastructure code. Invoked before implementation begins.
 - **`devops-senior-engineer`** — Reads ADRs and implements IaC. Invoked after an ADR is approved.
+- **`devsecops-senior-engineer`** — Reviews code, Terraform, Kubernetes manifests, Dockerfiles, and GitHub Actions for secrets, credentials, and dangerous configurations before commit or push. Returns a structured APPROVED or BLOQUEADO verdict.
+- **`postgres-rds-db-senior`** — Designs, reviews, and implements the RDS PostgreSQL database layer. Covers architecture decisions, Terraform modules, security (no public access, no secrets in Git), backend integration, observability, and incident runbooks.
 
 ## Skills
 

@@ -16,6 +16,7 @@ output "db_instance_resource_id" {
 output "db_master_user_secret_arn" {
   description = "ARN of the Secrets Manager secret storing the RDS master user credentials (managed by RDS)."
   value       = aws_db_instance.this.master_user_secret[0].secret_arn
+  sensitive   = true
 }
 
 output "backend_irsa_role_arn" {
