@@ -57,14 +57,14 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage_low" {
 
 resource "aws_cloudwatch_metric_alarm" "rds_memory_low" {
   alarm_name          = "${var.project.name}-${var.project.environment}-rds-memory-low"
-  alarm_description   = "RDS FreeableMemory below 128 MB. db.t3.micro has 1 GB total."
+  alarm_description   = "RDS FreeableMemory below 64 MB. db.t3.micro has 1 GB total; PostgreSQL uses most of it normally."
   namespace           = "AWS/RDS"
   metric_name         = "FreeableMemory"
   dimensions          = { DBInstanceIdentifier = aws_db_instance.this.identifier }
   statistic           = "Average"
   period              = 60
   evaluation_periods  = 3
-  threshold           = 134217728
+  threshold           = 67108864
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.rds_alerts.arn]
