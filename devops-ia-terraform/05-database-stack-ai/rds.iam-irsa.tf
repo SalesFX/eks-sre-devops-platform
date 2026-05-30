@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "backend_irsa_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_issuer_host}:sub"
-      values   = ["system:serviceaccount:default:backend"]
+      values   = ["system:serviceaccount:app:backend"]
     }
 
     condition {
