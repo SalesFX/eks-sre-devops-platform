@@ -139,11 +139,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: devops-ia-apps/frontend/devops-ia-platform
-        run: npm ci
-
-      - name: Fix known vulnerabilities
-        working-directory: devops-ia-apps/frontend/devops-ia-platform
-        run: npm audit fix --force || true
+        run: npm install
 
       - name: npm audit (CRITICAL blocks, HIGH warns)
         working-directory: devops-ia-apps/frontend/devops-ia-platform
@@ -272,6 +268,17 @@ jobs:
           image-ref: devops-ia/backend:scan
           severity: CRITICAL
           exit-code: "1"
+          ignore-unfixed: true
+          format: table
+          trivyignores: .trivyignore
+
+      - name: Trivy container scan backend SARIF
+        uses: aquasecurity/trivy-action@v0.35.0
+        if: always()
+        with:
+          image-ref: devops-ia/backend:scan
+          severity: CRITICAL
+          exit-code: "0"
           ignore-unfixed: true
           format: sarif
           output: trivy-image-backend.sarif

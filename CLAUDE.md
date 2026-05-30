@@ -4,13 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AWS infrastructure workshop using Terraform and Kubernetes. Stacks are independent directories prefixed with a two-digit number (e.g. `01-networking-stack-ai`). The `00-remote-backend-stack-ai` stack (if it exists) is always excluded from bulk operations.
+DevOps/SRE portfolio platform on AWS running a real application: **Incident Tracker** (incident management system). Backend is Node.js 20 + Express + TypeScript + Prisma ORM; frontend is Next.js 14 + Tailwind CSS. Database is RDS PostgreSQL 16 with IAM Database Authentication via IRSA — no static passwords anywhere. All application workloads run in the `app` namespace.
+
+Stacks are independent directories prefixed with a two-digit number (e.g. `01-networking-stack-ai`). The `00-remote-backend-stack-ai` stack (if it exists) is always excluded from bulk operations.
 
 ### Directory Structure
 
-- `devops-ia-terraform/` — Terraform stacks for AWS infrastructure
-- `devops-ia-apps/` — Application source code (frontend Next.js, backend .NET)
+- `devops-ia-terraform/` — Terraform stacks for AWS infrastructure (stacks 00-05)
+- `devops-ia-apps/` — Application source code
+  - `backend/` — Node.js + TypeScript + Prisma; `src/lib/prisma.ts` generates IAM tokens via `@aws-sdk/rds-signer`
+  - `backend/prisma/` — Prisma schema and versioned migrations (`migrations/0_init/`)
+  - `frontend/devops-ia-platform/` — Next.js 14 + Tailwind CSS
 - `devops-ia-kubernetes/` — Kubernetes manifests organized by application
+  - `storage/` — StorageClass gp3 (default cluster StorageClass)
+
+### Terraform Stacks (00-05)
+
+| Stack | What it creates |
+|---|---|
+| `00-remote-backend-stack-ai` | S3 bucket for Terraform state + DynamoDB lock table |
+| `01-networking-stack-ai` | VPC multi-AZ, public/private subnets (3 AZs), NAT Gateway, Flow Logs |
+| `02-eks-stack-ai` | EKS cluster 1.31, Managed Node Group (4x t3.small), ECR repos, OIDC Provider |
+| `03-ci-cd-stack-ai` | GitHub OIDC Identity Provider + IAM Role `devops-ia-production-github-actions` |
+| `04-addons-stack-ai` | metrics-server, AWS Load Balancer Controller, EBS CSI Driver addon (IRSA), StorageClass gp3 |
+| `05-database-stack-ai` | RDS PostgreSQL 16, IRSA role for backend, SG, CloudWatch alarms, SNS |
 
 ## Agents
 

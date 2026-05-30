@@ -200,3 +200,8 @@ SCREENSHOTS.md
 .claude/agent-memory/
 **/__pycache__/
 *.pyc
+
+# Prisma generated client and SQLite dev artifacts
+prisma/generated/
+*.db
+*.db-journal
