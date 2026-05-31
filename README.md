@@ -1,6 +1,8 @@
-# DevOps/SRE Platform on AWS: EKS + Terraform + GitOps
+# Cloud Native Platform on AWS
 
-Plataforma DevOps/SRE de portfólio completa na AWS, com uma aplicação real (Incident Tracker) rodando em ambiente cloud production-like. O projeto demonstra práticas que se usam em ambientes reais: infraestrutura como código em camadas independentes com Terraform, pipeline CI/CD autenticado via OIDC sem credenciais fixas, entrega contínua por GitOps com ArgoCD, banco de dados RDS com autenticação IAM via IRSA (sem senha estática), e observabilidade com VictoriaMetrics e Grafana.
+### Terraform, EKS, GitOps, DevSecOps, RDS IAM Auth and Observability
+
+Plataforma cloud native de portfólio completa na AWS, com uma aplicação real (Incident Tracker) rodando em ambiente cloud production-like. O projeto demonstra práticas que se usam em ambientes reais: infraestrutura como código em camadas independentes com Terraform, pipeline CI/CD autenticado via OIDC sem credenciais fixas, entrega contínua por GitOps com ArgoCD, banco de dados RDS com autenticação IAM via IRSA (sem senha estática), e observabilidade com VictoriaMetrics e Grafana.
 
 > Screenshots devem ser adicionados manualmente em `docs/architecture/screenshots/`.
 
@@ -468,12 +470,56 @@ Os valores reais estao nos outputs do Terraform (`terraform output` em cada stac
 
 ## Roadmap
 
-Evolucoes planejadas para proximas fases do projeto:
+### Logs: Grafana Alloy + Loki
 
-- **Loki + Promtail**: agregacao de logs estruturados dos pods com retencao configuravel, substituindo a dependencia do CloudWatch Logs para logs de aplicacao
-- **Tempo**: distributed tracing (OpenTelemetry) para rastrear requests atraves de frontend, backend e banco, identificando gargalos de latencia
-- **Alertmanager**: gerenciamento de alertas do Kubernetes (regras de alertas para pod OOMKilled, node Not Ready, PVC quase cheio), complementando os alarmes CloudWatch existentes no RDS
-- **Runbooks de incidentes simulados**: cenarios documentados com injecao de falha real (chaos engineering basico) e resolucao guiada — demonstrando o ciclo completo de resposta a incidente na plataforma
+Hoje a plataforma tem metricas (VictoriaMetrics) mas nao tem agregacao de logs. A proxima camada e:
+
+```
+Grafana Alloy (coleta nos pods)
+        |
+       Loki (armazenamento e indexacao)
+        |
+      Grafana (correlacao metricas + logs)
+```
+
+Grafana Alloy substitui o Promtail como agente de coleta — mais flexivel para pipelines de processamento e preparado para OpenTelemetry.
+
+### Traces: Tempo
+
+Com Loki resolvendo logs, o passo seguinte e rastreabilidade de requests end-to-end:
+
+```
+Backend (OpenTelemetry SDK)
+        |
+       Tempo (armazenamento de traces)
+        |
+      Grafana (correlacao metricas + logs + traces)
+```
+
+Permite identificar em qual servico (frontend, backend, banco) uma requisicao lenta esta gastando tempo.
+
+### Alertas Kubernetes: Alertmanager
+
+Hoje os alertas de RDS chegam via CloudWatch + SNS. Para alertas do Kubernetes (pod OOMKilled, node NotReady, PVC quase cheio), o fluxo seria:
+
+```
+VMAlert (regras de alerta no VictoriaMetrics)
+        |
+  Alertmanager (routing, agrupamento, silenciamento)
+        |
+      Email / Slack / PagerDuty
+```
+
+Complementar aos alarmes CloudWatch existentes, que ficam responsaveis por metricas de infraestrutura AWS.
+
+### Runbooks e Incidentes Simulados
+
+Os runbooks ja existem em `docs/runbooks/` e os incidentes simulados em `docs/incidents/`. O proximo passo e injecao de falha real (chaos engineering basico):
+
+- Matar um pod durante carga e observar o PDB e o rolling update em acao
+- Saturar conexoes do RDS e observar o alarme CloudWatch disparar
+- Corromper uma migration e observar o PreSync hook bloquear o deploy
+- Forcar OOMKill com requisicao de dataset grande e documentar o comportamento do HPA (quando implementado)
 
 ## ADRs (Architecture Decision Records)
 
