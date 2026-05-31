@@ -1,6 +1,6 @@
 # DevOps/SRE Platform on AWS: EKS + Terraform + GitOps
 
-Plataforma DevOps/SRE de portfólio completa na AWS, com uma aplicação real (Incident Tracker) rodando em produção. O projeto demonstra práticas que se usam em ambientes reais: infraestrutura como código em camadas independentes com Terraform, pipeline CI/CD autenticado via OIDC sem credenciais fixas, entrega contínua por GitOps com ArgoCD, banco de dados RDS com autenticação IAM via IRSA (sem senha estática), e observabilidade com VictoriaMetrics e Grafana.
+Plataforma DevOps/SRE de portfólio completa na AWS, com uma aplicação real (Incident Tracker) rodando em ambiente cloud production-like. O projeto demonstra práticas que se usam em ambientes reais: infraestrutura como código em camadas independentes com Terraform, pipeline CI/CD autenticado via OIDC sem credenciais fixas, entrega contínua por GitOps com ArgoCD, banco de dados RDS com autenticação IAM via IRSA (sem senha estática), e observabilidade com VictoriaMetrics e Grafana.
 
 > Screenshots devem ser adicionados manualmente em `docs/architecture/screenshots/`.
 
@@ -50,7 +50,7 @@ graph TD
     GHA -->|docker push| ECR
     GHA -->|commit tag| KUST
     KUST --> ARGO
-    ARGO -->|kubectl apply| EKS
+    ARGO -->|sync desired state| EKS
     EKS --> MIG
     MIG -->|migrate deploy| RDS
     EKS --> BE
@@ -144,7 +144,11 @@ Subnets publicas recebem a tag `kubernetes.io/role/elb = "1"` para que o AWS Loa
 
 ### Stack 02: EKS
 
-Cluster `devops-ia-production` (Kubernetes 1.31) com Managed Node Group de 4 instancias `t3.small` (AMI `AL2023_x86_64_STANDARD`), distribuidos em 3 AZs. Inclui:
+Cluster `devops-ia-production` (Kubernetes 1.31) com Managed Node Group de 4 instancias `t3.small` (AMI `AL2023_x86_64_STANDARD`), distribuidos em 3 AZs.
+
+> **Ambiente demonstrativo:** ajuste a quantidade e o tipo dos nodes conforme o orcamento disponivel. 4x `t3.small` garante capacidade para todos os componentes (app + ArgoCD + monitoring), mas gera custo. Para reducao de custo, 2x `t3.medium` ou 3x `t3.small` podem ser suficientes dependendo dos addons habilitados.
+
+Inclui:
 
 - OIDC Provider do cluster (base para IRSA)
 - ECR repositories: `devops-ia/production/backend` e `devops-ia/production/frontend`
@@ -187,7 +191,9 @@ O backend nao usa senha de banco. O fluxo completo:
 2. O EKS injeta um token OIDC no pod via `automountServiceAccountToken: true`
 3. `src/lib/prisma.ts` usa `@aws-sdk/rds-signer` para gerar um token IAM assinado (SigV4) valido por 15 minutos
 4. O Prisma conecta ao banco com `postgresql://app_user:<token>@<host>:5432/devops_ia?sslmode=require`
-5. Um timer faz refresh proativo do token 2 minutos antes do vencimento, sem interromper conexoes em andamento
+5. Um timer faz refresh proativo do token a cada 13 minutos (2 minutos antes do vencimento), descartando o cliente antigo apos as queries em andamento completarem — sem interromper conexoes ativas
+
+> **Atencao para quem reproduzir:** como o token expira em 15 minutos, a aplicacao precisa obrigatoriamente implementar logica de renovacao. Reutilizar um PrismaClient com token expirado resulta em `FATAL: PAM authentication failed`. O padrao implementado em `src/lib/prisma.ts` serve como referencia.
 
 O usuario `app_user` tem `GRANT rds_iam` no PostgreSQL. O acesso e auditado via CloudTrail (eventos `rds-db:connect`).
 
@@ -451,7 +457,7 @@ Os valores reais estao nos outputs do Terraform (`terraform output` em cada stac
 | Conta AWS | `<account-id>` |
 | Regiao | `us-east-1` |
 | Cluster EKS | `devops-ia-production` |
-| ALB endpoint | `k8s-app-devopsia-a05a05588d-34662498.us-east-1.elb.amazonaws.com` |
+| ALB endpoint | URL gerada dinamicamente pelo ALB apos o deploy (obtida via `kubectl get ingress -n app`) |
 | RDS endpoint | `<rds-endpoint>.us-east-1.rds.amazonaws.com:5432` |
 | Banco | `devops_ia` |
 | ECR backend | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend` |
@@ -459,6 +465,15 @@ Os valores reais estao nos outputs do Terraform (`terraform output` em cada stac
 | GitHub Actions role | `arn:aws:iam::<account-id>:role/devops-ia-production-github-actions` |
 | Backend IRSA role | `arn:aws:iam::<account-id>:role/devops-ia-production-backend-irsa` |
 | EBS CSI IRSA role | `arn:aws:iam::<account-id>:role/devops-ia-production-ebs-csi` |
+
+## Roadmap
+
+Evolucoes planejadas para proximas fases do projeto:
+
+- **Loki + Promtail**: agregacao de logs estruturados dos pods com retencao configuravel, substituindo a dependencia do CloudWatch Logs para logs de aplicacao
+- **Tempo**: distributed tracing (OpenTelemetry) para rastrear requests atraves de frontend, backend e banco, identificando gargalos de latencia
+- **Alertmanager**: gerenciamento de alertas do Kubernetes (regras de alertas para pod OOMKilled, node Not Ready, PVC quase cheio), complementando os alarmes CloudWatch existentes no RDS
+- **Runbooks de incidentes simulados**: cenarios documentados com injecao de falha real (chaos engineering basico) e resolucao guiada — demonstrando o ciclo completo de resposta a incidente na plataforma
 
 ## ADRs (Architecture Decision Records)
 
