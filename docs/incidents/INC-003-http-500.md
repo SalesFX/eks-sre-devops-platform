@@ -69,3 +69,44 @@ if (!VALID_SEVERITIES.includes(body.severity)) {
 1. Delegar validacao de dominio ao ORM resulta em erros 500 em vez de 400 — usuarios recebem mensagem de erro generica sem entender o que fizeram errado
 2. A ausencia de testes de contrato entre frontend e backend permite que mudancas no frontend quebrem o backend silenciosamente
 3. O scope do incidente foi facilmente identificado pelos logs do Prisma — quando Loki estiver disponivel, criar alerta para `PrismaClientValidationError`
+
+---
+
+## Simulacao em producao — 2026-06-01
+
+**Tipo:** Secret ausente causando `CreateContainerConfigError`
+**Severidade:** Warning (servico antigo continuou no ar — maxUnavailable: 0)
+**MTTR: ~5 minutos**
+
+| Horario (BRT) | Evento |
+|---|---|
+| 14:55:29 | `backend-secrets` deletado + `kubectl rollout restart deployment/backend` |
+| 14:55:34 | Novo pod `backend-78bb96f4cd-wndwf` entra em `CreateContainerConfigError` |
+| 14:58:29 | Alerta `ContainerImagePullFailed` dispara no Grafana (Aviso/DISPARADO) |
+| 15:00:16 | `backend-secrets` recriado com novo token IAM + JWT |
+| 15:00:23 | Backend volta ao estado Running |
+
+**Alertas disparados:**
+- `ContainerImagePullFailed` (DISPARADO) — `reason=CreateContainerConfigError`, container `backend` no pod `backend-78bb96f4cd-wndwf`
+- `KubePodNotReady` (PENDENTE) — pod nao ficou pronto
+- `KubeContainerWaiting` (PENDENTE) — container aguardando configuracao
+
+**Causa raiz:** secret `backend-secrets` ausente — o Kubernetes nao consegue montar as variaveis de ambiente `DATABASE_URL` e `JWT_SECRET` no container.
+
+**Resolucao:**
+```bash
+# 1. Gerar novo token IAM (expira em 15 min — gerar imediatamente antes)
+aws rds generate-db-auth-token --hostname <rds-host> --port 5432 \
+  --region us-east-1 --username app_user > /tmp/token.txt
+
+# 2. Recriar o secret
+kubectl create secret generic backend-secrets \
+  --from-literal=database-url="postgresql://app_user:<token-encoded>@<rds-host>:5432/devops_ia?sslmode=require" \
+  --from-literal=jwt-secret="$(openssl rand -base64 32)" \
+  -n app
+
+# 3. Reiniciar o deployment para pegar o novo secret
+kubectl rollout restart deployment/backend -n app
+```
+
+**Licao aprendida:** secrets criticos devem ter backup documentado no runbook. Em producao, usar AWS Secrets Manager com External Secrets Operator elimina a dependencia de secrets manuais.
