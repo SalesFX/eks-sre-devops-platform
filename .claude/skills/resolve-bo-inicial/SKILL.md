@@ -417,6 +417,11 @@ aws ecr describe-images --repository-name devops-ia/production/backend \
 Causa: sync anterior ainda em execucao.
 Solucao: aguardar o timeout ou cancelar via UI/CLI do ArgoCD. O auto-sync vai sincronizar automaticamente.
 
+### ArgoCD monitoring falha com "must be no more than 63 characters"
+
+Causa: `releaseName: victoria-metrics` gera nomes como `victoria-metrics-victoria-metrics-k8s-stack-kube-controller-manager` (66+ chars).
+Solucao: usar `releaseName: vm` no `monitoring-application.yaml`. Nomes gerados ficam em ~53 chars.
+
 ### ArgoCD monitoring OutOfSync para kube-controller-manager
 
 Causa: EKS nao expoe o kube-controller-manager como Service (gerenciado pela AWS).
