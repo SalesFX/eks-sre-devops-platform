@@ -8,6 +8,5 @@ resource "aws_db_subnet_group" "this" {
   }
 
   lifecycle {
-    prevent_destroy = true
   }
 }

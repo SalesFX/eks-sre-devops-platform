@@ -4,6 +4,5 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 
   lifecycle {
-    prevent_destroy = true
   }
 }

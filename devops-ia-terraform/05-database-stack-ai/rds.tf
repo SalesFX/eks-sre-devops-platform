@@ -37,7 +37,4 @@ resource "aws_db_instance" "this" {
     Component = "rds-instance"
   }
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
