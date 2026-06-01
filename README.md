@@ -869,6 +869,24 @@ curl -X POST "http://$ALB/backend/auth/register" \
 | ADR-0016 | Database migrations com Prisma migrate deploy | Accepted |
 | ADR-0017 | Observabilidade de app e RDS (CloudWatch alarms) | Accepted |
 
+## Skills Claude Code
+
+Skills operacionais em `.claude/skills/`, cada uma com escopo bem definido para nao haver sobreposicao:
+
+| Skill | Escopo | Quando usar |
+|---|---|---|
+| `/terraform-deploy` | Deploy de stacks Terraform | Provisionar ou atualizar infraestrutura |
+| `/dockerfile-generator` | Geracao de Dockerfiles | Containerizar uma aplicacao |
+| `/docker-push-ecr` | Build e push de imagens | Publicar nova versao no ECR |
+| `/resolve-bo-inicial` | Rebuild completo do zero | Destruiu tudo e quer recriar do zero |
+| `/depoveiro` | Saude da aplicacao | Pods com erro, 503 no ALB, banco nao conecta, migration falhou |
+| `/PlantonistaOps` | Saude da infraestrutura | Terraform travado, node group, kubectl sem auth, ArgoCD sistema |
+| `/bo-real-prod` | Simulacao de incidentes | Quer testar os alertas, ver o Grafana disparar, demonstrar SRE |
+
+**Separacao depoveiro vs PlantonistaOps:**
+- Pods do `backend`/`frontend`, secrets, banco, migration, ArgoCD Application `devops-ia` -> `/depoveiro`
+- Terraform, EKS nodes, kubectl credentials, ArgoCD sistema (dex, CNI) -> `/PlantonistaOps`
+
 ## Runbooks
 
 Documentacao operacional em `docs/runbooks/`:

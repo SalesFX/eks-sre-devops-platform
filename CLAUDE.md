@@ -41,14 +41,21 @@ Four specialized agents are defined in `.claude/agents/`:
 
 ## Skills
 
-Skills are defined in `.claude/skills/`:
+Skills are defined in `.claude/skills/`. Each skill has a specific scope — do not overlap them:
 
-- **`terraform-deploy`** — Deploys Terraform stacks (`fmt` -> `validate` -> `plan` -> `apply`)
-- **`dockerfile-generator`** — Generates optimized Dockerfiles (multi-stage, alpine, rootless, healthcheck)
-- **`docker-push-ecr`** — Builds and pushes Docker images to ECR
-- **`resolve-bo-inicial`** — Full rebuild runbook: clean infra, Terraform, RDS user setup, secrets, images, kustomize deploy, ArgoCD, monitoring. Invoke whenever doing a fresh deploy from scratch.
-- **`depoveiro`** — Diagnoses EKS cluster health: stuck pods, ImagePullBackOff, CNI errors, ArgoCD out of sync. Invoke whenever pods are not starting or the cluster seems unhealthy.
-- **`PlantonistaOps`** — On-call runbook for known incidents: Terraform state lock, node group stuck, kubectl without credentials, ArgoCD dex crash, memory pressure on t3.small.
+| Skill | Escopo | Quando usar |
+|---|---|---|
+| `terraform-deploy` | Deploy de stacks Terraform | Provisionar ou atualizar infraestrutura |
+| `dockerfile-generator` | Geracao de Dockerfiles | Containerizar uma aplicacao |
+| `docker-push-ecr` | Build e push de imagens | Publicar nova versao no ECR |
+| `resolve-bo-inicial` | Rebuild completo do zero | Destruiu e quer recriar tudo |
+| `depoveiro` | Saude da APLICACAO | Pods app com erro, 503, banco nao conecta, migration falhou |
+| `PlantonistaOps` | Saude da INFRAESTRUTURA | Terraform travado, node group, kubectl sem auth, ArgoCD sistema |
+| `bo-real-prod` | Simulacao de incidentes | Quer ver alertas no Grafana, testar incident response |
+
+**Regra de ouro para depoveiro vs PlantonistaOps:**
+- Problema com pods do `backend`/`frontend`, secrets, banco, migration ou ArgoCD Application `devops-ia` -> `depoveiro`
+- Problema com Terraform, EKS nodes, kubectl credentials, ArgoCD sistema (dex, CNI) -> `PlantonistaOps`
 
 ## Deploy Workflow
 
