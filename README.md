@@ -4,15 +4,15 @@
 
 ## Overview
 
-Plataforma cloud native executando na AWS com aplicacao real em producao (Incident Tracker). Objetivo: demonstrar praticas utilizadas em ambientes enterprise.
+Plataforma cloud native executando na AWS com aplicação real em produção (Incident Tracker). Objetivo: demonstrar práticas utilizadas em ambientes enterprise.
 
 - Terraform para provisionamento de infraestrutura em camadas independentes
-- EKS para orquestracao de containers com seguranca de pod (non-root, readOnly filesystem)
-- GitHub Actions para CI/CD autenticado via OIDC, sem credenciais estaticas
+- EKS para orquestração de containers com segurança de pod (non-root, readOnly filesystem)
+- GitHub Actions para CI/CD autenticado via OIDC, sem credenciais estáticas
 - ArgoCD para GitOps — o pipeline atualiza o git, o ArgoCD converge o cluster
-- RDS PostgreSQL com IAM Authentication via IRSA, sem senha estatica em lugar nenhum
+- RDS PostgreSQL com IAM Authentication via IRSA, sem senha estática em lugar nenhum
 - VictoriaMetrics e Grafana para observabilidade, CloudWatch para alertas de banco
-- Simulacao de 4 incidentes reais com ciclo completo de deteccao, resolucao e MTTR documentado
+- Simulação de 4 incidentes reais com ciclo completo de detecção, resolução e MTTR documentado
 
 ## Stack
 
@@ -20,38 +20,38 @@ Plataforma cloud native executando na AWS com aplicacao real em producao (Incide
 |---|---|
 | Compute | Amazon EKS 1.31 (4 worker nodes t3.small, Amazon Linux 2023) |
 | Infraestrutura | Terraform (5 stacks independentes, state no S3) |
-| CI/CD | GitHub Actions + OIDC (sem credenciais estaticas) |
+| CI/CD | GitHub Actions + OIDC (sem credenciais estáticas) |
 | GitOps | ArgoCD com auto-sync e self-heal |
 | Backend | Node.js 20 + Express + TypeScript + Prisma ORM |
 | Frontend | Next.js 14 + Tailwind CSS |
-| Banco | RDS PostgreSQL 16, IAM auth via IRSA (sem senha estatica) |
+| Banco | RDS PostgreSQL 16, IAM auth via IRSA (sem senha estática) |
 | Observabilidade | VictoriaMetrics + Grafana + CloudWatch alarms + SNS |
-| Seguranca de pipeline | Gitleaks, Checkov, Semgrep, Trivy (10 jobs de scan) |
-| Seguranca de workload | non-root, readOnlyRootFilesystem, drop ALL capabilities, IRSA |
+| Segurança de pipeline | Gitleaks, Checkov, Semgrep, Trivy (10 jobs de scan) |
+| Segurança de workload | non-root, readOnlyRootFilesystem, drop ALL capabilities, IRSA |
 
 ## AI-Assisted Operations
 
-Este projeto foi desenvolvido com Claude Code usando agentes especializados e skills reutilizaveis para acelerar e estruturar o trabalho de plataforma.
+Este projeto foi desenvolvido com Claude Code usando agentes especializados e skills reutilizáveis para acelerar e estruturar o trabalho de plataforma.
 
-**Agentes** com papeis bem definidos e restricoes claras:
-- Arquiteto de solucoes: planeja, avalia trade-offs e produz ADRs (nunca escreve codigo)
+**Agentes** com papéis bem definidos e restrições claras:
+- Arquiteto de soluções: planeja, avalia trade-offs e produz ADRs (nunca escreve código)
 - DevOps Engineer: implementa IaC a partir dos ADRs aprovados
-- Engenheiro DevSecOps: revisa codigo, Terraform e pipelines antes de qualquer commit
+- Engenheiro DevSecOps: revisa código, Terraform e pipelines antes de qualquer commit
 - Especialista RDS: cobre banco, IRSA, migrations e runbooks de incidente
 
-**Skills** reutilizaveis para operacoes de plataforma:
-- Diagnostico de aplicacao vs diagnostico de infraestrutura (escopos separados)
-- Simulacao de incidentes com ciclo SRE completo
+**Skills** reutilizáveis para operações de plataforma:
+- Diagnóstico de aplicação vs diagnóstico de infraestrutura (escopos separados)
+- Simulação de incidentes com ciclo SRE completo
 - Rebuild de infraestrutura do zero com todos os passos manuais documentados
 
-O diferencial nao e usar IA para gerar codigo: e ter criado um processo estruturado onde cada agente tem responsabilidade unica, entregaveis definidos e restricoes explicitas.
+O diferencial não é usar IA para gerar código: e ter criado um processo estruturado onde cada agente tem responsabilidade única, entregáveis definidos e restrições explicitas.
 
 - [docs/agents/](docs/agents/README.md)
 - [docs/skills/](docs/skills/README.md)
 
-## Aplicacao
+## Aplicação
 
-**Incident Tracker** — sistema real de gerenciamento de incidentes com autenticacao JWT, dashboard e historico.
+**Incident Tracker** — sistema real de gerenciamento de incidentes com autenticação JWT, dashboard e histórico.
 
 ![Login](docs/architecture/screenshots/frontend-login.png)
 
@@ -155,29 +155,29 @@ flowchart TB
 
 ![CloudWatch e Email SNS](docs/architecture/screenshots/alerta-aws-recursos-db-rds-email.png)
 
-## Incident Response em Producao
+## Incident Response em Produção
 
-4 incidentes simulados em ambiente real com ciclo SRE completo: deteccao via alerta no Grafana, resolucao com runbook e MTTR documentado.
+4 incidentes simulados em ambiente real com ciclo SRE completo: detecção via alerta no Grafana, resolução com runbook e MTTR documentado.
 
 | Incidente | Tipo | Severidade | Impacto | MTTR |
 |---|---|---|---|---|
-| INC-004 | Imagem invalida (ErrImagePull) | Aviso | Zero downtime, maxUnavailable:0 protegeu o servico | 6 min |
+| INC-004 | Imagem inválida (ErrImagePull) | Aviso | Zero downtime, maxUnavailable:0 protegeu o servico | 6 min |
 | INC-003 | Secret ausente (ContainerConfigError) | Aviso | Zero downtime, pods antigos continuaram servindo | 5 min |
-| INC-002 | OOMKilled (container sem memoria) | Critico | Pod em CrashLoop, sem impacto em producao | 4 min |
-| INC-001 | RDS indisponivel (rds_iam revogado) | Critico | 503 total, readinessProbe bloqueou o ALB | 4 min |
+| INC-002 | OOMKilled (container sem memória) | Crítico | Pod em CrashLoop, sem impacto em produção | 4 min |
+| INC-001 | RDS indisponível (rds_iam revogado) | Crítico | 503 total, readinessProbe bloqueou o ALB | 4 min |
 
 **INC-004 (Aviso)**
 ![INC-004](docs/architecture/screenshots/inc-004-alert-v2.png)
 
-**INC-002 (Critico)**
+**INC-002 (Crítico)**
 ![INC-002](docs/architecture/screenshots/inc-002-alert.png)
 
-**INC-001 (Critico)**
+**INC-001 (Crítico)**
 ![INC-001](docs/architecture/screenshots/inc-001-alert.png)
 
 Para reproduzir os incidentes com alertas reais no Grafana: ver [docs/incidents/](docs/incidents/).
 
-## Acesso rapido
+## Acesso rápido
 
 ```bash
 # Grafana (Platform Alerts dashboard e a home)
@@ -192,12 +192,12 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 kubectl get ingress devops-ia -n app -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
-## Documentacao
+## Documentação
 
 | Documento | Conteudo |
 |---|---|
 | [docs/setup/](docs/setup/README.md) | Passo a passo para recriar o ambiente do zero |
-| [docs/architecture/](docs/architecture/overview.md) | Stacks Terraform, IRSA, pipelines, seguranca, ADRs |
+| [docs/architecture/](docs/architecture/overview.md) | Stacks Terraform, IRSA, pipelines, segurança, ADRs |
 | [docs/incidents/](docs/incidents/) | Incidentes simulados com timeline e MTTR real |
 | [docs/runbooks/](docs/runbooks/) | Runbooks operacionais para falhas conhecidas |
 | [docs/agents/](docs/agents/README.md) | Agentes especializados e suas responsabilidades |
@@ -205,7 +205,7 @@ kubectl get ingress devops-ia -n app -o jsonpath='{.status.loadBalancer.ingress[
 
 ## Roadmap
 
-- Loki + Grafana Alloy: agregacao de logs dos pods
+- Loki + Grafana Alloy: agregação de logs dos pods
 - Tempo: distributed tracing com OpenTelemetry
 - Alertmanager: routing de alertas Kubernetes
-- External Secrets Operator: integracao com AWS Secrets Manager
+- External Secrets Operator: integração com AWS Secrets Manager
