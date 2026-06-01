@@ -1,10 +1,41 @@
-# INC-004: Deploy com imagem com bug (panic no startup)
+# INC-004: Deploy com imagem invalida (ImagePullBackOff)
 
-**Data:** 2026-05-30
-**Duracao:** 4 minutos (20:41 a 20:45 UTC)
-**Severidade:** SEV1 (zero replicas saudaveis durante o rollout)
-**Status:** Resolved via rollback automatico pelo Kubernetes
-**Servicos afetados:** backend (indisponivel durante o rolling update)
+**Data:** 2026-06-01
+**Duracao:** 5 minutos (14:17 a 14:22 BRT)
+**Severidade:** Warning (servico continuou no ar — maxUnavailable: 0)
+**Status:** Resolved via git revert + kubectl apply -k
+**Servicos afetados:** rolling update bloqueado — usuarios nao afetados
+
+## Simulacao em producao — 2026-06-01
+
+| Horario (BRT) | Evento |
+|---|---|
+| 14:17:22 | kustomization.yaml atualizado com tag inexistente `sha-badimage999` e pushed para clean-main |
+| 14:17:25 | ArgoCD detecta mudanca e inicia rolling update |
+| 14:17:28 | Novos pods `backend` e `frontend` entram em `ErrImagePull` / `ImagePullBackOff` |
+| 14:19:00 | Alertas `KubePodNotReady` e `KubeContainerWaiting` disparam no Grafana (Warning) |
+| 14:21:58 | On-call executa `git revert HEAD` e push para clean-main |
+| 14:22:16 | Pods voltam ao estado Running — incidente encerrado |
+
+**MTTR: 5 minutos**
+
+**Alertas disparados:**
+- `Pod Nao Pronto` (Warning) — novos pods nao conseguem puxar a imagem
+- `KubeContainerWaiting: ImagePullBackOff` (Warning) — container aguardando imagem inexistente
+
+**O que funcionou:**
+- `maxUnavailable: 0` manteve os pods antigos servindo trafego durante todo o incidente
+- Zero downtime para usuarios finais
+- `readinessProbe` impediu que pods com erro entrassem no load balancer
+
+**Resolucao:**
+```bash
+git revert HEAD
+git push origin clean-main
+kubectl apply -k devops-ia-kubernetes/
+```
+
+---
 
 ---
 
