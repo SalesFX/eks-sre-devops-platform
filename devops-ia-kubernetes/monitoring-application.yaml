@@ -12,7 +12,7 @@ spec:
     chart: victoria-metrics-k8s-stack
     targetRevision: "0.81.0"
     helm:
-      releaseName: victoria-metrics
+      releaseName: vm
       values: |
         vmsingle:
           spec:
