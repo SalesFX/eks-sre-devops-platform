@@ -31,40 +31,65 @@ Plataforma cloud native de portfolio na AWS com aplicacao real em producao. Demo
 ## Arquitetura
 
 ```mermaid
-graph TD
-    DEV[Desenvolvedor<br/>push clean-main]
-    GHA[GitHub Actions<br/>CI/CD + Security Scans]
-    ECR[Amazon ECR<br/>backend / frontend]
-    KUST[kustomization.yaml<br/>image tags sha-xxxxx]
-    ARGO[ArgoCD<br/>namespace argocd]
-    EKS[EKS Cluster<br/>devops-ia-production<br/>4x t3.small]
+flowchart TB
 
-    subgraph NS_APP[namespace app]
-        MIG[Migration Job<br/>PreSync hook]
-        BE[Backend 2 pods]
-        FE[Frontend 2 pods]
+    subgraph CICD["CI/CD"]
+        direction TB
+        DEV["Desenvolvedor\npush clean-main"]
+        GHA["GitHub Actions\nCI/CD + Security Scans"]
+        ECR["Amazon ECR\nbackend : frontend"]
+        KUST["kustomization.yaml\natualiza image tag sha-xxxxx\ncommit skip-ci no git"]
+
+        DEV -->|"git push"| GHA
+        GHA -->|"docker push"| ECR
+        GHA -->|"commit tag"| KUST
     end
 
-    RDS[RDS PostgreSQL 16<br/>private subnet]
-    ALB[Application Load Balancer]
-    CW[CloudWatch Alarms]
-    SNS[SNS Email]
-
-    subgraph NS_MON[namespace monitoring]
-        VM[VictoriaMetrics]
-        GF[Grafana]
+    subgraph GITOPS["GitOps"]
+        direction TB
+        ARGO["ArgoCD\ndetecta mudanca no git\nautomated sync + self-heal"]
+        KUST -->|"ArgoCD detecta\nnovo commit"| ARGO
     end
 
-    DEV --> GHA
-    GHA -->|docker push| ECR
-    GHA -->|commit tag| KUST
-    KUST --> ARGO
-    ARGO -->|sync| EKS
-    EKS --> MIG --> RDS
-    EKS --> BE -->|IAM token IRSA| RDS
-    ALB --> FE & BE
-    CW --> SNS
-    EKS --> VM --> GF
+    subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
+        direction TB
+
+        ALB["Application Load Balancer\nAWS LBC"]
+
+        subgraph APP["namespace: app"]
+            direction LR
+            FE["Frontend\n2 pods Next.js"]
+            BE["Backend\n2 pods Node.js"]
+            MIG["Migration Job\nprisma migrate deploy\nPreSync hook"]
+        end
+
+        subgraph MON["namespace: monitoring"]
+            direction LR
+            VM["VictoriaMetrics"] --> GF["Grafana"]
+        end
+
+        ALB --> FE
+        ALB --> BE
+    end
+
+    subgraph DATA["Data"]
+        direction TB
+        RDS[("RDS PostgreSQL 16\nprivate subnet")]
+    end
+
+    subgraph ALERTS["Alerting"]
+        direction TB
+        CW["CloudWatch\nRDS Alarms"] --> SNS["SNS"] --> EMAIL["Email"]
+    end
+
+    ARGO -->|"sync desired state"| APP
+    ECR -->|"image pull"| APP
+
+    MIG -->|"migrate deploy"| RDS
+    BE -->|"IAM token IRSA"| RDS
+
+    RDS -.->|"connections, storage, memory"| CW
+    APP -.->|"metricas"| VM
 ```
 
 ## Infraestrutura
