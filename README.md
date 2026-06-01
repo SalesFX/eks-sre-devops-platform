@@ -9,7 +9,7 @@ Plataforma cloud native executando na AWS com aplicação real em produção (In
 - Terraform para provisionamento de infraestrutura em camadas independentes
 - EKS para orquestração de containers com segurança de pod (non-root, readOnly filesystem)
 - GitHub Actions para CI/CD autenticado via OIDC, sem credenciais estáticas
-- ArgoCD para GitOps — o pipeline atualiza o git, o ArgoCD converge o cluster
+- ArgoCD para GitOps: o pipeline atualiza o git, o ArgoCD converge o cluster
 - RDS PostgreSQL com IAM Authentication via IRSA, sem senha estática em lugar nenhum
 - VictoriaMetrics e Grafana para observabilidade, CloudWatch para alertas de banco
 - Simulação de 4 incidentes reais com ciclo completo de detecção, resolução e MTTR documentado
@@ -49,16 +49,6 @@ O diferencial não é usar IA para gerar código: e ter criado um processo estru
 - [docs/agents/](docs/agents/README.md)
 - [docs/skills/](docs/skills/README.md)
 
-## Aplicação
-
-**Incident Tracker** — sistema real de gerenciamento de incidentes com autenticação JWT, dashboard e histórico.
-
-![Login](docs/architecture/screenshots/frontend-login.png)
-
-![Dashboard](docs/architecture/screenshots/frontend-dashboard.png)
-
-![Criar Incidente](docs/architecture/screenshots/frontend-criar-alerta.png)
-
 ## Arquitetura
 
 ```mermaid
@@ -82,7 +72,7 @@ flowchart TB
         KUST -->|"novo commit detectado"| ARGO
     end
 
-    subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
+    subgraph CLUSTER["EKS Cluster: devops-ia-production (4x t3.small)"]
         direction TB
 
         ECR["Amazon ECR\nrepositories: frontend / backend"]
@@ -130,6 +120,16 @@ flowchart TB
     RDS -.->|"connections, storage, memory"| CW
     APP -.->|"Prometheus metrics"| VM
 ```
+
+## Aplicação
+
+**Incident Tracker** é um sistema real de gerenciamento de incidentes com autenticação JWT, dashboard e histórico.
+
+![Login](docs/architecture/screenshots/frontend-login.png)
+
+![Dashboard](docs/architecture/screenshots/frontend-dashboard.png)
+
+![Criar Incidente](docs/architecture/screenshots/frontend-criar-alerta.png)
 
 ## Infraestrutura
 
