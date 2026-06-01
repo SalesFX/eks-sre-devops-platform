@@ -6,7 +6,7 @@ Plataforma cloud native de portfolio completa na AWS, com uma aplicacao real (In
 
 ## Aplicacao
 
-**Incident Tracker** — sistema de gerenciamento de incidentes com autenticacao JWT, criacao e acompanhamento de incidentes, painel de controle e historico.
+**Incident Tracker** e um sistema de gerenciamento de incidentes com autenticacao JWT, criacao e acompanhamento de incidentes, painel de controle e historico.
 
 | Componente | Tecnologia |
 |---|---|
@@ -131,7 +131,7 @@ kubectl get secret -n monitoring grafana-admin-secret \
 
 Dashboard customizado no Grafana com tabela de alertas ativos em tempo real, com severidade colorida (Info, Aviso, Critico, Desastre) e identificacao precisa do pod e container afetado.
 
-O dashboard e a home do Grafana — ao abrir, o on-call ve imediatamente o estado da plataforma.
+O dashboard e a home do Grafana. Ao abrir o Grafana, o on-call ve imediatamente o estado da plataforma.
 
 Implementado via VMRule (VictoriaMetrics) com alertas customizados para o namespace `app`:
 
@@ -146,7 +146,7 @@ Implementado via VMRule (VictoriaMetrics) com alertas customizados para o namesp
 
 Os 4 incidentes abaixo foram simulados em producao real com ciclo SRE completo: deteccao via alerta no Grafana, resposta seguindo runbook, resolucao e documentacao de MTTR.
 
-### INC-004 — Deploy com Imagem Invalida
+### INC-004: Deploy com Imagem Invalida
 
 **Severidade:** Aviso | **MTTR: 6 minutos**
 
@@ -156,9 +156,9 @@ Os 4 incidentes abaixo foram simulados em producao real com ciclo SRE completo: 
 
 ![INC-004 Alert](docs/architecture/screenshots/inc-004-alert-v2.png)
 
-- `ContainerImagePullFailed` (Aviso/DISPARADO) — pod `backend-5bf79544b9-dd9fv`, container `backend`, motivo `ImagePullBackOff`
-- `KubePodNotReady` (Aviso/PENDENTE) — pod nao pronto
-- `KubeContainerWaiting` (Aviso/PENDENTE) — container aguardando imagem
+- `ContainerImagePullFailed` (Aviso/DISPARADO): pod `backend-5bf79544b9-dd9fv`, container `backend`, motivo `ImagePullBackOff`
+- `KubePodNotReady` (Aviso/PENDENTE): pod nao pronto
+- `KubeContainerWaiting` (Aviso/PENDENTE): container aguardando imagem
 
 **Por que o servico nao caiu:**
 
@@ -167,12 +167,12 @@ A configuracao `maxUnavailable: 0` no RollingUpdate garante que nenhum pod sauda
 **Como foi resolvido e por que:**
 
 ```bash
-# Forma correta (GitOps — mantem repositorio como fonte da verdade)
+# Forma correta via GitOps (mantem repositorio como fonte da verdade)
 git revert HEAD
 git push origin main
 # ArgoCD detecta a mudanca e sincroniza automaticamente
 
-# Forma rapida para emergencia (imperativa — use com cuidado)
+# Forma rapida para emergencia (imperativa, use com cuidado)
 kubectl set image deployment/backend \
   backend=<account>.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend:sha-anterior \
   -n app
@@ -194,17 +194,17 @@ O `kubectl rollout undo` usa o ReplicaSet anterior que ainda esta no cluster, se
 
 ---
 
-### INC-003 — Secret Ausente (CreateContainerConfigError)
+### INC-003: Secret Ausente (CreateContainerConfigError)
 
 **Severidade:** Aviso | **MTTR: 5 minutos**
 
-**O que aconteceu:** o Secret `backend-secrets` foi deletado do cluster. O backend nao conseguiu nem iniciar o container porque as variaveis de ambiente `DATABASE_URL` e `JWT_SECRET` nao existiam. O Kubernetes reportou `CreateContainerConfigError` — o pod nem chegou a rodar.
+**O que aconteceu:** o Secret `backend-secrets` foi deletado do cluster. O backend nao conseguiu nem iniciar o container porque as variaveis de ambiente `DATABASE_URL` e `JWT_SECRET` nao existiam. O Kubernetes reportou `CreateContainerConfigError` e o pod nem chegou a rodar.
 
 **Alertas disparados:**
 
 ![INC-003 Alert](docs/architecture/screenshots/inc-003-alert.png)
 
-- `ContainerImagePullFailed` (Aviso/DISPARADO) — `reason=CreateContainerConfigError`, container `backend`
+- `ContainerImagePullFailed` (Aviso/DISPARADO): `reason=CreateContainerConfigError`, container `backend`
 - `KubePodNotReady` (Aviso/PENDENTE)
 - `KubeContainerWaiting` (Aviso/PENDENTE)
 
@@ -213,7 +213,7 @@ O `kubectl rollout undo` usa o ReplicaSet anterior que ainda esta no cluster, se
 O Secret precisa ser recriado com um token IAM fresco (validade 15 min) e um novo JWT secret. Como o banco usa IAM auth sem senha estatica, o token deve ser gerado imediatamente antes de criar o secret.
 
 ```bash
-# 1. Gerar token IAM (expira em 15 min — executar imediatamente antes do secret)
+# 1. Gerar token IAM (expira em 15 min, executar imediatamente antes do secret)
 aws rds generate-db-auth-token \
   --hostname <rds-host> --port 5432 \
   --region us-east-1 --username app_user \
@@ -240,7 +240,7 @@ kubectl create secret generic backend-secrets \
 kubectl rollout restart deployment/backend -n app
 ```
 
-**Por que o encoding importa:** o token IAM contem caracteres especiais (`/`, `?`, `=`, `+`) que precisam ser percent-encoded para ser validos em uma URL PostgreSQL. Usar `urllib.parse.quote(token, safe='')` garante que todos os caracteres sao codificados corretamente — inclusive `/` que a funcao ignora por padrao sem `safe=''`.
+**Por que o encoding importa:** o token IAM contem caracteres especiais (`/`, `?`, `=`, `+`) que precisam ser percent-encoded para ser validos em uma URL PostgreSQL. Usar `urllib.parse.quote(token, safe='')` garante que todos os caracteres sao codificados corretamente, inclusive `/` que a funcao ignora por padrao quando `safe` nao e especificado.
 
 **Licao aprendida:** secrets criticos devem ter backup do procedimento de recriacao documentado no runbook. Em producao, External Secrets Operator integrado ao AWS Secrets Manager eliminaria a dependencia de secrets manuais.
 
@@ -250,18 +250,18 @@ kubectl rollout restart deployment/backend -n app
 
 ---
 
-### INC-002 — Container OOMKilled
+### INC-002: Container OOMKilled
 
 **Severidade:** Critico | **MTTR: 4 minutos**
 
-**O que aconteceu:** um container com memory limit insuficiente (10Mi) tentou alocar mais memoria do que o limite permitido. O kernel Linux encerrou o processo via OOM Killer com `SIGKILL` (exit code 137). O Kubernetes tentou reiniciar o container, que continuou OOMKilling em loop — caracterizando `CrashLoopBackOff`.
+**O que aconteceu:** um container com memory limit insuficiente (10Mi) tentou alocar mais memoria do que o limite permitido. O kernel Linux encerrou o processo via OOM Killer com `SIGKILL` (exit code 137). O Kubernetes tentou reiniciar o container, que continuou OOMKilling em loop, caracterizando `CrashLoopBackOff`.
 
 **Alertas disparados:**
 
 ![INC-002 Alert](docs/architecture/screenshots/inc-002-alert.png)
 
-- `ContainerOOMKilled` (Critico/DISPARADO) — `pod=oom-demo container=memory-hog reason=OOMKilled`
-- `PodCrashLooping` (Critico/DISPARADO) — container reiniciando continuamente
+- `ContainerOOMKilled` (Critico/DISPARADO): pod `oom-demo`, container `memory-hog`, motivo `OOMKilled`
+- `PodCrashLooping` (Critico/DISPARADO): container reiniciando continuamente
 
 **Como identificar OOMKilled:**
 
@@ -282,16 +282,16 @@ kubectl top pod <pod> -n app
 **Como foi resolvido e por que:**
 
 ```bash
-# Opcao 1 — aumentar o memory limit (causa raiz: limite muito baixo)
+# Opcao 1: aumentar o memory limit (causa raiz era o limite muito baixo)
 kubectl set resources deployment backend \
   --limits=memory=512Mi --requests=memory=128Mi \
   -n app
 
-# Opcao 2 — rollback se o OOM foi introducido por novo codigo com memory leak
+# Opcao 2: rollback se o OOM foi introducido por novo codigo com memory leak
 kubectl rollout undo deployment/backend -n app
 # Depois: git revert para manter o repositorio sincronizado
 
-# Opcao 3 — deletar pod standalone (se nao for Deployment)
+# Opcao 3: deletar pod standalone, caso nao seja um Deployment
 kubectl delete pod <pod-oomkilled> -n app
 ```
 
@@ -305,24 +305,24 @@ Nao chute o valor. Use `kubectl top pod` em staging por pelo menos 24h e observe
 
 ---
 
-### INC-001 — RDS Indisponivel (Falha de Autenticacao IAM)
+### INC-001: RDS Indisponivel (Falha de Autenticacao IAM)
 
 **Severidade:** Critico | **MTTR: 4 minutos**
 
-**O que aconteceu:** o grant `rds_iam` foi revogado do usuario `app_user` no PostgreSQL. Com isso, o RDS passou a rejeitar tokens IAM validos — a autenticacao e dupla: o token IAM precisa ser valido no nivel AWS E o usuario precisa ter `rds_iam` no nivel do banco. Novos pods do backend nao conseguiram conectar, a readinessProbe comecou a falhar, e o ALB parou de rotear trafego para o backend — servico completamente fora do ar com 503.
+**O que aconteceu:** o grant `rds_iam` foi revogado do usuario `app_user` no PostgreSQL. Com isso, o RDS passou a rejeitar tokens IAM validos. A autenticacao e dupla: o token IAM precisa ser valido no nivel AWS e o usuario precisa ter `rds_iam` no nivel do banco. Novos pods do backend nao conseguiram conectar, a readinessProbe comecou a falhar, e o ALB parou de rotear trafego para o backend. O servico ficou completamente fora do ar com 503.
 
 **Alertas disparados:**
 
 ![INC-001 Alert](docs/architecture/screenshots/inc-001-alert.png)
 
-- `PodCrashLooping` (Critico/DISPARADO) — backend reiniciando por falha de conexao ao banco
-- `KubePodNotReady` (Aviso/PENDENTE) — pods do backend com readinessProbe falhando
-- `DeploymentReplicasMismatch` (Aviso/DISPARADO) — replicas disponiveis abaixo do desejado
-- `KubePdbNotEnoughHealthyPods` (Aviso/PENDENTE) — PDB sem pods saudaveis suficientes
+- `PodCrashLooping` (Critico/DISPARADO): backend reiniciando por falha de conexao ao banco
+- `KubePodNotReady` (Aviso/PENDENTE): pods do backend com readinessProbe falhando
+- `DeploymentReplicasMismatch` (Aviso/DISPARADO): replicas disponiveis abaixo do desejado
+- `KubePdbNotEnoughHealthyPods` (Aviso/PENDENTE): PDB sem pods saudaveis suficientes
 
 **Por que o 503 foi imediato:**
 
-A `readinessProbe` chama `GET /backend/health` a cada 10s. O endpoint `/health` verifica a conexao com o banco. Sem `rds_iam`, a conexao falha, o endpoint retorna 503, a probe falha, e o pod e marcado como `0/1 Ready`. O ALB nao roteia trafego para pods nao prontos — design correto, mas efeito colateral e a indisponibilidade total.
+A `readinessProbe` chama `GET /backend/health` a cada 10s. O endpoint `/health` verifica a conexao com o banco. Sem `rds_iam`, a conexao falha, o endpoint retorna 503, a probe falha, e o pod e marcado como `0/1 Ready`. O ALB nao roteia trafego para pods nao prontos. O design e correto, mas o efeito colateral foi a indisponibilidade total.
 
 **Como foi resolvido e por que:**
 
@@ -331,7 +331,7 @@ A `readinessProbe` chama `GET /backend/health` a cada 10s. O endpoint `/health` 
 kubectl logs -l app.kubernetes.io/name=backend -n app | grep -i "error\|auth\|connect\|PAM"
 # Procurar: "PAM authentication failed" ou "password authentication failed"
 
-# 2. Verificar se app_user tem rds_iam (via pod temporario — banco e privado)
+# 2. Verificar se app_user tem rds_iam (via pod temporario, banco e privado)
 kubectl run pg-check --image=postgres:16-alpine --restart=Never -n app \
   --env="PGPASSWORD=<master-pass>" \
   -- psql -h <rds-host> -U dbadmin -d devops_ia \
@@ -355,7 +355,7 @@ curl http://<alb-endpoint>/backend/health
 
 **Como detectar mais rapido no futuro:**
 
-O CloudWatch alarm `DatabaseConnections` nao captura falhas de autenticacao — o alarme so dispara se houver conexoes ativas. Para detectar falhas de auth, seria necessario um alerta baseado nos logs de erro do RDS via CloudWatch Logs Insights:
+O CloudWatch alarm `DatabaseConnections` nao captura falhas de autenticacao. O alarme so dispara se houver conexoes ativas. Para detectar falhas de auth, seria necessario um alerta baseado nos logs de erro do RDS via CloudWatch Logs Insights:
 
 ```sql
 fields @message
@@ -374,10 +374,10 @@ fields @message
 
 | Incidente | Tipo | Severidade | Impacto | MTTR |
 |---|---|---|---|---|
-| INC-004 | Imagem invalida (ErrImagePull) | Aviso | Zero downtime — maxUnavailable:0 | 6 min |
-| INC-003 | Secret ausente (CreateContainerConfigError) | Aviso | Zero downtime — pods antigos servindo | 5 min |
-| INC-002 | OOMKilled — container sem memoria | Critico | Pod em CrashLoop, sem impacto em producao | 4 min |
-| INC-001 | RDS indisponivel — rds_iam revogado | Critico | 503 total — readinessProbe bloqueou ALB | 4 min |
+| INC-004 | Imagem invalida (ErrImagePull) | Aviso | Zero downtime, maxUnavailable:0 protegeu o servico | 6 min |
+| INC-003 | Secret ausente (CreateContainerConfigError) | Aviso | Zero downtime, pods antigos servindo | 5 min |
+| INC-002 | OOMKilled (container sem memoria) | Critico | Pod em CrashLoop, sem impacto em producao | 4 min |
+| INC-001 | RDS indisponivel, rds_iam revogado | Critico | 503 total, readinessProbe bloqueou ALB | 4 min |
 
 ## Como Simular os Incidentes
 
@@ -393,7 +393,7 @@ kubectl apply -f devops-ia-kubernetes/demo-alerts-vmrule.yaml
 kubectl get vmrule devops-ia-demo-alerts -n monitoring
 ```
 
-### Simular INC-004 — Imagem Invalida
+### Simular INC-004: Imagem Invalida
 
 ```bash
 # 1. Trigger: injetar tag inexistente diretamente no deployment
@@ -418,7 +418,7 @@ kubectl set image deployment/backend backend=<account>.dkr.ecr.us-east-1.amazona
 kubectl set image deployment/frontend frontend=<account>.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend:sha-da9bf41 -n app
 ```
 
-### Simular INC-003 — Secret Ausente
+### Simular INC-003: Secret Ausente
 
 ```bash
 # 1. Trigger: deletar o secret e forcar restart
@@ -447,7 +447,7 @@ kubectl create secret generic backend-secrets \
 kubectl rollout restart deployment/backend -n app
 ```
 
-### Simular INC-002 — OOMKilled
+### Simular INC-002: OOMKilled
 
 ```bash
 # 1. Trigger: criar pod com memory limit de 10Mi e script que aloca memoria agressivamente
@@ -490,7 +490,7 @@ kubectl set resources deployment backend --limits=memory=512Mi --requests=memory
 kubectl rollout undo deployment/backend -n app
 ```
 
-### Simular INC-001 — RDS Indisponivel
+### Simular INC-001: RDS Indisponivel
 
 ```bash
 # Pre-requisito: obter senha master do RDS
@@ -573,7 +573,7 @@ docs/
 
 ## Stacks Terraform
 
-Cada stack e um diretorio independente com seu proprio state remoto no S3. Aplicadas em sequencia porque dependem umas das outras via `terraform_remote_state`. Nenhuma stack usa modulos comunitarios — apenas recursos nativos do provider `hashicorp/aws`.
+Cada stack e um diretorio independente com seu proprio state remoto no S3. Aplicadas em sequencia porque dependem umas das outras via `terraform_remote_state`. Nenhuma stack usa modulos comunitarios, apenas recursos nativos do provider `hashicorp/aws`.
 
 ### Stack 00: Remote Backend
 
@@ -591,7 +591,7 @@ Cluster `devops-ia-production` (Kubernetes 1.31) com Managed Node Group de 4 ins
 
 ### Stack 03: CI/CD (OIDC)
 
-Registra o GitHub como OIDC Identity Provider e cria a IAM Role `devops-ia-production-github-actions`. A trust policy restringe a assuncao da role a tokens gerados por este repositorio — sem credenciais estaticas.
+Registra o GitHub como OIDC Identity Provider e cria a IAM Role `devops-ia-production-github-actions`. A trust policy restringe a assuncao da role a tokens gerados por este repositorio, sem credenciais estaticas.
 
 ### Stack 04: Addons
 
@@ -614,7 +614,7 @@ O backend nao usa senha de banco. O fluxo:
 4. O Prisma conecta com `postgresql://app_user:<token>@<host>:5432/devops_ia?sslmode=require`
 5. Um timer faz refresh proativo a cada 13 minutos (2 minutos antes do vencimento)
 
-O usuario `app_user` precisa ter `GRANT rds_iam` no PostgreSQL — sem isso, o token IAM e rejeitado mesmo sendo valido no nivel AWS (autorizacao dupla).
+O usuario `app_user` precisa ter `GRANT rds_iam` no PostgreSQL. Sem esse grant, o token IAM e rejeitado mesmo sendo valido no nivel AWS (autorizacao dupla).
 
 > Se o backend retornar `PAM authentication failed` ou `password authentication failed` nos logs, verifique primeiro se `app_user` tem o grant: `SELECT pg_has_role('app_user', 'rds_iam', 'member');`
 
@@ -629,7 +629,7 @@ O usuario `app_user` precisa ter `GRANT rds_iam` no PostgreSQL — sem isso, o t
 | `build-frontend` | Mesma sequencia para o Next.js 14 |
 | `update-kustomization` | Atualiza tags no `kustomization.yaml`, commita com `[skip ci]` |
 
-O ArgoCD detecta o novo commit e sincroniza o cluster automaticamente. O Migration Job (PreSync hook) roda `prisma migrate deploy` antes de qualquer deploy — se a migration falhar, o sync e abortado.
+O ArgoCD detecta o novo commit e sincroniza o cluster automaticamente. O Migration Job (PreSync hook) roda `prisma migrate deploy` antes de qualquer deploy. Se a migration falhar, o sync e abortado.
 
 ## Pipeline de Seguranca
 
@@ -675,7 +675,7 @@ Stack VictoriaMetrics k8s stack (Helm), namespace `monitoring`, gerenciada pelo 
 | `kube-state-metrics` | Metricas de estado dos objetos Kubernetes |
 | `node-exporter` | DaemonSet: metricas de hardware e SO dos nodes |
 
-CloudWatch alarms para RDS: `DatabaseConnections > 80`, `FreeStorageSpace < 5 GB`, `FreeableMemory < 64 MB` — todos com notificacao via SNS para email.
+CloudWatch alarms para RDS: `DatabaseConnections > 80`, `FreeStorageSpace < 5 GB`, `FreeableMemory < 64 MB`. Todos disparam notificacao via SNS para email.
 
 ## Seguranca
 
@@ -687,7 +687,7 @@ CloudWatch alarms para RDS: `DatabaseConnections > 80`, `FreeStorageSpace < 5 GB
 | Pods | `runAsNonRoot`, `readOnlyRootFilesystem`, drop ALL capabilities |
 | Volumes EBS | gp3 encrypted |
 | TLS no banco | `rds.force_ssl = 1` + `sslmode=require` na connection string |
-| Secrets fora do Git | `backend-secrets`, `grafana-admin-secret` — criados manualmente, nunca commitados |
+| Secrets fora do Git | `backend-secrets`, `grafana-admin-secret`, criados manualmente e nunca commitados |
 
 ## Do zero ao ar
 
@@ -730,7 +730,7 @@ MASTER_SECRET_ARN=$(terraform output -raw db_master_user_secret_arn)
 MASTER_PASS=$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_ARN" \
   --query 'SecretString' --output text | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['password'])")
 
-# Criar app_user com IAM auth (dentro do cluster — banco e privado)
+# Criar app_user com IAM auth (dentro do cluster, banco e privado)
 kubectl create namespace app
 kubectl run pg-setup --image=postgres:16-alpine --restart=Never -n app \
   --env="PGPASSWORD=$MASTER_PASS" \
