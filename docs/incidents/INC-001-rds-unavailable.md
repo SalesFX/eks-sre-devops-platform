@@ -63,3 +63,59 @@ Seguido de rollout restart do backend para forcar regeneracao do token IAM.
 1. O health check retornando HTTP 200 com `db: "error"` mascarou o problema para o ALB — pods continuavam "healthy" do ponto de vista do load balancer mas falhavam para os usuarios
 2. Dependencia de etapa manual (`GRANT rds_iam`) e um ponto fragil — automatizar via Terraform ou script de bootstrap
 3. O alarm `rds-connections-high` foi o primeiro indicador, mais rapido que o report de usuario
+
+---
+
+## Simulacao em producao — 2026-06-01
+
+**Severidade:** Critico — servico completamente fora do ar (503 no ALB)
+**MTTR: ~4 minutos**
+
+| Horario (BRT) | Evento |
+|---|---|
+| 15:32:37 | `REVOKE rds_iam FROM app_user` executado via pod temporario |
+| 15:33:20 | Backend reiniciado — novos pods tentam gerar token IAM e falham |
+| 15:33:xx | Readiness probe retorna 503 — pods marcados como 0/1 (nao prontos) |
+| 15:33:xx | ALB para de rotear trafego — servico completamente fora do ar |
+| 15:37:01 | Alertas `PodCrashLooping` (Critico) e `DeploymentReplicasMismatch` disparam |
+| 15:37:34 | `GRANT rds_iam TO app_user` restaurado + rollout restart |
+| 15:38:11 | Backend reconecta ao RDS — health retorna `db: connected` |
+
+**MTTR: 4 minutos**
+
+**Alertas disparados:**
+- `PodCrashLooping` (DISPARADO/Critico) — `pod=backend-5768c6f755-pcpgq container=backend`
+- `KubePodNotReady` (PENDENTE/Aviso) — pods do backend nao ficam prontos
+- `DeploymentReplicasMismatch` (DISPARADO/Aviso) — replicas disponiveis < desejadas
+- `KubePdbNotEnoughHealthyPods` (PENDENTE/Aviso) — PDB sem pods saudaveis suficientes
+
+**Causa raiz:** revogacao do grant `rds_iam` do usuario `app_user` no PostgreSQL. Sem esse grant, o RDS recusa autenticacao IAM mesmo que o token seja valido — a autorizacao e dupla (IAM + PostgreSQL).
+
+**Por que o 503 foi imediato:**
+- A readinessProbe chama `/backend/health` que verifica conexao com o banco
+- Sem `rds_iam`, o token IAM e rejeitado pelo RDS (`password authentication failed`)
+- O pod sobe mas a probe falha — ALB nao roteia trafego para pods nao prontos
+
+**Resolucao:**
+```bash
+# 1. Identificar a causa via logs
+kubectl logs -l app.kubernetes.io/name=backend -n app | grep -i "error\|auth\|connect"
+
+# 2. Verificar se o app_user tem rds_iam
+# (via pod temporario com psql)
+kubectl run pg-check --image=postgres:16-alpine --restart=Never -n app \
+  --env="PGPASSWORD=<master-pass>" \
+  -- psql -h <rds-host> -U dbadmin -d devops_ia \
+  -c "SELECT rolname FROM pg_roles WHERE rolname='rds_iam' AND pg_has_role('app_user', oid, 'member');"
+
+# 3. Restaurar o grant
+kubectl run pg-restore --image=postgres:16-alpine --restart=Never -n app \
+  --env="PGPASSWORD=<master-pass>" \
+  -- psql -h <rds-host> -U dbadmin -d devops_ia \
+  -c "GRANT rds_iam TO app_user;"
+
+# 4. Reiniciar o deployment para gerar novos tokens IAM
+kubectl rollout restart deployment/backend -n app
+```
+
+**Licao aprendida:** o CloudWatch alarm `RDSConnectionsHigh` nao captura falhas de autenticacao — o alerta veio dos pods em CrashLoop, nao do banco. Para detectar falhas de autenticacao, seria necessario um alerta baseado nos logs do RDS via CloudWatch Logs Insights.
