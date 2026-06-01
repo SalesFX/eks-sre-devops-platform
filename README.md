@@ -178,7 +178,7 @@ Este projeto foi desenvolvido com Claude Code usando agentes especializados e sk
 
 **Agentes** com papeis bem definidos e restricoes claras:
 - Arquiteto de solucoes: planeja, avalia trade-offs e produz ADRs (nunca escreve codigo)
-- Platform Engineer: implementa IaC a partir dos ADRs aprovados
+- DevOps Engineer: implementa IaC a partir dos ADRs aprovados
 - Engenheiro DevSecOps: revisa codigo, Terraform e pipelines antes de qualquer commit
 - Especialista RDS: cobre banco, IRSA, migrations e runbooks de incidente
 
