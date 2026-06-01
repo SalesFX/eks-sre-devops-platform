@@ -13,57 +13,13 @@ spec:
       rules:
         - alert: PodCrashLooping
           expr: |
-            rate(kube_pod_container_status_restarts_total{
-              namespace="app"
-            }[5m]) * 60 * 5 > 0
-          for: 2m
+            rate(kube_pod_container_status_restarts_total{namespace="app"}[5m]) * 300 > 1
+          for: 1m
           labels:
             severity: critical
           annotations:
-            summary: "{{ $labels.pod }} em CrashLoop"
-            description: "Container {{ $labels.container }} do servico {{ $labels.pod }} reiniciou {{ printf \"%.0f\" $value }} vezes nos ultimos 5 minutos."
-
-        - alert: PodNotReady
-          expr: |
-            sum by (namespace, pod) (
-              max by (namespace, pod) (
-                kube_pod_status_phase{
-                  namespace="app",
-                  phase=~"Pending|Unknown|Failed"
-                }
-              )
-            ) > 0
-          for: 2m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Pod {{ $labels.pod }} nao esta pronto"
-            description: "Pod {{ $labels.pod }} no namespace {{ $labels.namespace }} nao esta pronto ha mais de 2 minutos."
-
-        - alert: DeploymentReplicasMismatch
-          expr: |
-            kube_deployment_spec_replicas{namespace="app"}
-            !=
-            kube_deployment_status_replicas_available{namespace="app"}
-          for: 2m
-          labels:
-            severity: warning
-          annotations:
-            summary: "{{ $labels.deployment }} com replicas divergentes"
-            description: "Deployment {{ $labels.deployment }} tem {{ $value }} replicas faltando."
-
-        - alert: ContainerOOMKilled
-          expr: |
-            kube_pod_container_status_last_terminated_reason{
-              namespace="app",
-              reason="OOMKilled"
-            } == 1
-          for: 0m
-          labels:
-            severity: critical
-          annotations:
-            summary: "{{ $labels.container }} ({{ $labels.pod }}) morto por OOM"
-            description: "Container {{ $labels.container }} no pod {{ $labels.pod }} foi encerrado por falta de memoria (OOMKilled)."
+            summary: "Pod {{ $labels.pod }} em CrashLoop"
+            description: "Container {{ $labels.container }} reiniciou muitas vezes."
 
         - alert: ContainerImagePullFailed
           expr: |
@@ -75,5 +31,30 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.container }} ({{ $labels.pod }}) falhou ao puxar imagem"
-            description: "Container {{ $labels.container }} do pod {{ $labels.pod }} nao consegue puxar a imagem. Motivo: {{ $labels.reason }}."
+            summary: "Falha ao puxar imagem em {{ $labels.pod }}"
+            description: "Pod {{ $labels.pod }} nao consegue puxar a imagem. Motivo: {{ $labels.reason }}."
+
+        - alert: DeploymentReplicasMismatch
+          expr: |
+            kube_deployment_spec_replicas{namespace="app"}
+            !=
+            kube_deployment_status_replicas_available{namespace="app"}
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.deployment }} com replicas divergentes"
+            description: "Deployment {{ $labels.deployment }} esta com replicas insuficientes."
+
+        - alert: ContainerOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{
+              namespace="app",
+              reason="OOMKilled"
+            } == 1
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "OOMKilled: {{ $labels.pod }}/{{ $labels.container }}"
+            description: "Container {{ $labels.container }} foi encerrado por falta de memoria."

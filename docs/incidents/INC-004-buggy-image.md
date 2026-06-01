@@ -28,12 +28,52 @@
 - Zero downtime para usuarios finais
 - `readinessProbe` impediu que pods com erro entrassem no load balancer
 
-**Resolucao:**
+**Como fizemos na simulacao (e por que nao e a forma correta):**
+
+Durante a simulacao usamos `kubectl set image` diretamente no deployment:
+
 ```bash
-git revert HEAD
-git push origin clean-main
-kubectl apply -k devops-ia-kubernetes/
+kubectl set image deployment/backend \
+  backend=...backend:sha-da9bf41 -n app
+
+kubectl set image deployment/frontend \
+  frontend=...frontend:sha-da9bf41 -n app
 ```
+
+Isso funciona e restaura o servico rapidamente, mas tem um problema grave: **bypassa o GitOps**. O git continua apontando para a tag ruim, e o ArgoCD com `selfHeal: true` vai eventualmente sobrescrever o cluster de volta para o estado do git — desfazendo o rollback manual.
+
+**A forma correta para imagem invalida (nao sobe):**
+
+```bash
+# 1. Reverter o commit que introduziu a tag ruim
+git revert HEAD
+git push origin main
+
+# 2. ArgoCD detecta a mudanca e sincroniza automaticamente
+# Nao e necessario mais nenhum comando — GitOps cuida do resto
+```
+
+**A forma correta para imagem com bug (sobe mas tem erro):**
+
+```bash
+# Opcao A — GitOps (recomendada, mantem historico)
+git revert HEAD
+git push origin main
+
+# Opcao B — imperativo (mais rapido, para emergencias criticas)
+kubectl rollout undo deployment/backend -n app
+kubectl rollout undo deployment/frontend -n app
+# Depois abrir git revert para sincronizar o repositorio com o cluster
+```
+
+O `kubectl rollout undo` usa o ReplicaSet anterior que ainda esta no cluster, sem precisar buildar nova imagem — MTTR pode ser de 30 segundos. Ideal quando cada minuto de downtime tem impacto financeiro.
+
+**Regra de ouro em SRE:** use o caminho mais rapido para restaurar o servico, depois abra o git revert para manter o repositorio como fonte da verdade.
+
+| Cenario | Container sobe? | Rollback ideal | MTTR tipico |
+|---|---|---|---|
+| Imagem invalida (ErrImagePull) | Nao | `git revert` | 5-15 min |
+| Imagem com bug (CrashLoop/500s) | Sim | `rollout undo` + `git revert` | 1-2 min |
 
 ---
 
