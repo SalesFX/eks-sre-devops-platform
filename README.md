@@ -64,11 +64,14 @@ flowchart TB
     subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
         direction TB
 
-        ECR["Amazon ECR\n2 repositorios: backend + frontend"]
+        ECR["Amazon ECR\nrepositories: frontend / backend"]
 
-        LBC["AWS Load Balancer Controller"]
-        INGRESS["Ingress\npath: /  →  Frontend\npath: /backend/*  →  Backend"]
-        LBC --> INGRESS
+        INGRESS["Ingress Resource\npath: /  →  Frontend\npath: /backend/*  →  Backend"]
+        LBC["AWS Load Balancer Controller\ncria e gerencia o ALB"]
+        ALB["Application Load Balancer"]
+
+        INGRESS -->|"assistido por"| LBC
+        LBC -->|"provisiona"| ALB
 
         subgraph APP["namespace: app"]
             direction TB
@@ -84,8 +87,8 @@ flowchart TB
         end
 
         ECR -->|"image pull"| APP
-        INGRESS -->|"/"| FE
-        INGRESS -->|"/backend/*"| BE
+        ALB -->|"/"| FE
+        ALB -->|"/backend/*"| BE
     end
 
     subgraph DATA["Data"]
