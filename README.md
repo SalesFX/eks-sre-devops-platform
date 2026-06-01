@@ -153,7 +153,7 @@ flowchart TB
 
 ## CloudWatch e Alertas
 
-![CloudWatch e Email SNS](docs/architecture/screenshots/alerta-aws-recursos-db-rds-email.png)
+![CloudWatch e Email SNS](docs/architecture/screenshots/cloudwatch-alarm-rds-email.png)
 
 ## Incident Response em Produção
 
