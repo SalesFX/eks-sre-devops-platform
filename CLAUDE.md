@@ -45,6 +45,7 @@ Skills are defined in `.claude/skills/`:
 - **`terraform-deploy`** — Deploys Terraform stacks (`fmt` → `validate` → `plan` → `apply`)
 - **`dockerfile-generator`** — Generates optimized Dockerfiles (multi-stage, alpine, rootless, healthcheck)
 - **`docker-push-ecr`** — Builds and pushes Docker images to ECR
+- **`resolve-bo-inicial`** — Full rebuild runbook: clean infra, Terraform, RDS user setup, secrets, images, kustomize deploy, ArgoCD, monitoring. Invoke whenever doing a fresh deploy from scratch.
 
 ## Deploy Workflow
 
@@ -59,6 +60,28 @@ Use the `terraform-deploy` skill (`.claude/skills/terraform-deploy/`):
 ```
 
 The skill runs: `fmt` → `validate` → `plan` (prints output) → `apply -auto-approve`, always passing `-var-file="envs/production.tfvars"` when present.
+
+## Fresh Deploy (Rebuild from Scratch)
+
+Use the `resolve-bo-inicial` skill whenever destroying and recreating all infrastructure.
+The full sequence after Terraform completes is **not just kubectl apply** — there are manual steps:
+
+1. `aws eks update-kubeconfig --name devops-ia-production --region us-east-1`
+2. **RDS user setup** (required on every fresh RDS): create `app_user`, grant `rds_iam` and schema permissions via a temporary pod — see skill for exact commands
+3. **Build and push images** to ECR with both `sha-<git-sha>` and `latest` tags
+4. **Update `kustomization.yaml`** with the new SHA tag, commit and push to `clean-main`
+5. Create namespace `app` and `backend-secrets` (IAM token + JWT — token expires in 15 min)
+6. `kubectl apply -k devops-ia-kubernetes/` — always use kustomize, never individual files
+7. Verify migration job completes before pods start receiving traffic
+8. Create namespace `monitoring` and `grafana-admin-secret`
+9. Install ArgoCD with `--server-side --force-conflicts` (CRDs are too large for client-side apply)
+10. Apply `argocd-application.yaml` and `monitoring-application.yaml`
+
+**Critical gotchas:**
+- Never `kubectl apply -f` individual deployment files — kustomize must set the image tag
+- The `kustomization.yaml` must not have `commonLabels` — it makes Deployment selectors immutable and breaks ArgoCD sync
+- The S3 state bucket uses versioning — when cleaning, delete all versions and delete markers, not just current objects
+- Terraform state lock files (`*.tflock`) in S3 must be deleted manually if a previous apply was interrupted
 
 ## Manual Terraform Commands
 
