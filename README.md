@@ -2,7 +2,17 @@
 
 ### Terraform, EKS, GitOps, DevSecOps, RDS IAM Auth, Observabilidade e Incident Response
 
-Plataforma cloud native de portfolio na AWS com aplicacao real em producao. Demonstra praticas de ambientes enterprise: IaC em camadas com Terraform, CI/CD via OIDC sem credenciais fixas, GitOps com ArgoCD, autenticacao IAM no banco via IRSA, observabilidade com VictoriaMetrics e Grafana, e simulacao de incidentes com ciclo SRE completo.
+## Overview
+
+Plataforma cloud native executando na AWS com aplicacao real em producao (Incident Tracker). Objetivo: demonstrar praticas utilizadas em ambientes enterprise.
+
+- Terraform para provisionamento de infraestrutura em camadas independentes
+- EKS para orquestracao de containers com seguranca de pod (non-root, readOnly filesystem)
+- GitHub Actions para CI/CD autenticado via OIDC, sem credenciais estaticas
+- ArgoCD para GitOps — o pipeline atualiza o git, o ArgoCD converge o cluster
+- RDS PostgreSQL com IAM Authentication via IRSA, sem senha estatica em lugar nenhum
+- VictoriaMetrics e Grafana para observabilidade, CloudWatch para alertas de banco
+- Simulacao de 4 incidentes reais com ciclo completo de deteccao, resolucao e MTTR documentado
 
 ## Stack
 
@@ -54,13 +64,14 @@ flowchart TB
     subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
         direction TB
 
-        ALB["Application Load Balancer\nAWS LBC"]
+        ALB["Application Load Balancer\npath: / → frontend\npath: /backend/* → backend"]
 
         subgraph APP["namespace: app"]
-            direction LR
+            direction TB
             FE["Frontend\n2 pods Next.js"]
             BE["Backend\n2 pods Node.js"]
             MIG["Migration Job\nprisma migrate deploy\nPreSync hook"]
+            FE -->|"API calls\n/backend/*"| BE
         end
 
         subgraph MON["namespace: monitoring"]
@@ -68,8 +79,8 @@ flowchart TB
             VM["VictoriaMetrics"] --> GF["Grafana"]
         end
 
-        ALB --> FE
-        ALB --> BE
+        ALB -->|"/ (paginas)"| FE
+        ALB -->|"/backend/* (API)"| BE
     end
 
     subgraph DATA["Data"]
