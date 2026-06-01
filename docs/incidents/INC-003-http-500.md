@@ -82,12 +82,12 @@ if (!VALID_SEVERITIES.includes(body.severity)) {
 |---|---|
 | 14:55:29 | `backend-secrets` deletado + `kubectl rollout restart deployment/backend` |
 | 14:55:34 | Novo pod `backend-78bb96f4cd-wndwf` entra em `CreateContainerConfigError` |
-| 14:58:29 | Alerta `ContainerImagePullFailed` dispara no Grafana (Aviso/DISPARADO) |
+| 14:58:29 | Alerta `ContainerConfigError` dispara no Grafana (Aviso/DISPARADO) |
 | 15:00:16 | `backend-secrets` recriado com novo token IAM + JWT |
 | 15:00:23 | Backend volta ao estado Running |
 
 **Alertas disparados:**
-- `ContainerImagePullFailed` (DISPARADO) — `reason=CreateContainerConfigError`, container `backend` no pod `backend-78bb96f4cd-wndwf`
+- `ContainerConfigError` (DISPARADO): container `backend`, motivo `CreateContainerConfigError` no pod `backend-78bb96f4cd-wndwf`
 - `KubePodNotReady` (PENDENTE) — pod nao ficou pronto
 - `KubeContainerWaiting` (PENDENTE) — container aguardando configuracao
 

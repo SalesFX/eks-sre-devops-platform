@@ -82,7 +82,7 @@ kubectl get pods -n app -w
 curl -s http://k8s-app-devopsia-a05a05588d-1756438931.us-east-1.elb.amazonaws.com/backend/health
 ```
 
-Aguardar ~1 min: alertas `ContainerImagePullFailed` e `KubePodNotReady` aparecem no Grafana.
+Aguardar ~1 min: alertas `ContainerImagePullFailed` (imagem nao encontrada) e `KubePodNotReady` aparecem no Grafana.
 
 ### Resolucao (boa pratica - GitOps)
 
@@ -132,7 +132,7 @@ kubectl get pods -n app | grep backend
 kubectl describe pod -l app.kubernetes.io/name=backend -n app | grep -A3 "Events:"
 ```
 
-Aguardar ~30s: alerta `ContainerImagePullFailed` com `reason=CreateContainerConfigError` no Grafana.
+Aguardar ~30s: alerta `ContainerConfigError` dispara no Grafana (Aviso) com o nome do pod e o motivo `CreateContainerConfigError`.
 
 ### Resolucao
 

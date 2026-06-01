@@ -34,6 +34,19 @@ spec:
             summary: "Falha ao puxar imagem em {{ $labels.pod }}"
             description: "Pod {{ $labels.pod }} nao consegue puxar a imagem. Motivo: {{ $labels.reason }}."
 
+        - alert: ContainerConfigError
+          expr: |
+            kube_pod_container_status_waiting_reason{
+              namespace="app",
+              reason=~"CreateContainerConfigError|CreateContainerError"
+            } == 1
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "Erro de configuracao em {{ $labels.pod }}"
+            description: "Container {{ $labels.container }} nao consegue iniciar. Motivo: {{ $labels.reason }}. Verificar secrets e configmaps do namespace app."
+
         - alert: DeploymentReplicasMismatch
           expr: |
             kube_deployment_spec_replicas{namespace="app"}
