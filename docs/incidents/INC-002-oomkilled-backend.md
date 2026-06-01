@@ -67,3 +67,53 @@ const incidents = await prisma.incident.findMany({
 1. Limites de memoria dimensionados para carga "esperada" falham quando o volume de dados cresce — revisar limites com base em dados reais
 2. PDB com `minAvailable: 1` e `podAntiAffinity` garantiram resiliencia real durante o incidente
 3. A ausencia de testes de carga na pipeline permite que regressoes de performance passem para producao
+
+---
+
+## Simulacao em producao — 2026-06-01
+
+**Severidade:** Critico
+**MTTR: ~4 minutos**
+
+| Horario (BRT) | Evento |
+|---|---|
+| 15:06:54 | Pod `oom-demo` criado com memory limit de `10Mi` e script que aloca 10MB/iteracao |
+| 15:07:10 | Pod entra em `OOMKilled` (exit code 137) — kernel mata o processo |
+| 15:07:12 | Kubernetes reinicia o container — CrashLoopBackOff |
+| 15:10:13 | Alertas `ContainerOOMKilled` (Critico/DISPARADO) e `PodCrashLooping` (Critico) disparam |
+| 15:10:58 | Pod deletado — servico backend nao foi afetado |
+
+**Alertas disparados:**
+- `ContainerOOMKilled` (DISPARADO/Critico) — `pod=oom-demo container=memory-hog reason=OOMKilled`
+- `PodCrashLooping` (DISPARADO/Critico) — pod reiniciando continuamente
+
+**Causa raiz:** container alocou mais memoria do que o limite configurado (10Mi). O kernel Linux encerrou o processo via OOM Killer (SIGKILL — exit code 137).
+
+**Como identificar OOMKilled:**
+```bash
+kubectl describe pod <pod> -n app | grep -A3 "Last State"
+# Reason: OOMKilled
+# Exit Code: 137
+
+kubectl top pod <pod> -n app
+# Ver consumo de memoria proximo ao limite
+```
+
+**Resolucao:**
+```bash
+# Opcao 1 — aumentar o memory limit
+kubectl set resources deployment backend \
+  --limits=memory=512Mi -n app
+
+# Opcao 2 — deletar o pod com OOM (se for pod standalone)
+kubectl delete pod <pod-oomkilled> -n app
+
+# Opcao 3 — rollback do deployment se o OOM foi introduzido por novo codigo
+kubectl rollout undo deployment/backend -n app
+```
+
+**Diferenca entre Exit Code 1 e Exit Code 137:**
+- Exit Code 1 = aplicacao crashou (bug, erro de configuracao)
+- Exit Code 137 = kernel matou o processo (OOMKilled ou SIGKILL manual)
+
+**Licao aprendida:** sempre configurar memory `requests` e `limits` baseado no consumo real medido em staging. Usar `kubectl top pod` e dashboards do Grafana para estabelecer baseline antes de ir para producao.
