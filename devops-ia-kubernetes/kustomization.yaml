@@ -19,8 +19,8 @@ resources:
 images:
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend
-  newTag: sha-da9bf41
+  newTag: sha-badimage999
 - name: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
   newName: 074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend
-  newTag: sha-da9bf41
+  newTag: sha-badimage999
 
