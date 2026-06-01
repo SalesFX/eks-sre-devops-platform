@@ -18,7 +18,7 @@ Plataforma cloud native executando na AWS com aplicacao real em producao (Incide
 
 | Camada | Tecnologia |
 |---|---|
-| Compute | EKS 1.31, 4x t3.small, AL2023 |
+| Compute | Amazon EKS 1.31 (4 worker nodes t3.small, Amazon Linux 2023) |
 | Infraestrutura | Terraform (5 stacks independentes, state no S3) |
 | CI/CD | GitHub Actions + OIDC (sem credenciais estaticas) |
 | GitOps | ArgoCD com auto-sync e self-heal |
@@ -26,7 +26,8 @@ Plataforma cloud native executando na AWS com aplicacao real em producao (Incide
 | Frontend | Next.js 14 + Tailwind CSS |
 | Banco | RDS PostgreSQL 16, IAM auth via IRSA (sem senha estatica) |
 | Observabilidade | VictoriaMetrics + Grafana + CloudWatch alarms + SNS |
-| Seguranca | Gitleaks, Checkov, Semgrep, Trivy (10 jobs de scan) |
+| Seguranca de pipeline | Gitleaks, Checkov, Semgrep, Trivy (10 jobs de scan) |
+| Seguranca de workload | non-root, readOnlyRootFilesystem, drop ALL capabilities, IRSA |
 
 ## Aplicacao
 
