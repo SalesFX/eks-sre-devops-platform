@@ -1,6 +1,6 @@
 # Agentes Especializados
 
-Este projeto usa Claude Code com agentes especializados definidos em `.claude/agents/`. Cada agente tem um papel especifico e restricoes claras — o arquiteto nunca escreve codigo, o engenheiro nunca toma decisoes arquiteturais sem um ADR aprovado.
+Este projeto usa Claude Code com agentes especializados definidos em `.claude/agents/`. Cada agente tem um papel especifico e restricoes claras — o arquiteto nunca escreve codigo, o platform engineer nunca toma decisoes arquiteturais sem um ADR aprovado.
 
 ## Agentes
 
@@ -10,7 +10,7 @@ Planeja arquiteturas, avalia trade-offs e produz Architecture Decision Records (
 
 Entregaveis: `docs/ADR-XXXX-titulo.md`
 
-### devops-senior-engineer
+### devops-senior-engineer (Platform Engineer)
 
 Le os ADRs aprovados pelo arquiteto e implementa a solucao em IaC (Terraform), manifestos Kubernetes ou configuracoes de pipeline. Segue rigorosamente as convencoes de nomenclatura e estrutura definidas em `.claude/rules/`.
 
