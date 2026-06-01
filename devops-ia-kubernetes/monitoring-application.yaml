@@ -95,6 +95,16 @@ spec:
         kubeProxy:
           enabled: false
 
+        # Desabilitar alertas que sao falso-positivos no EKS ou irrelevantes
+        defaultRules:
+          disabled:
+            KubeControllerManagerDown: true
+            KubeSchedulerDown: true
+            ScrapePoolHasNoTargets: true
+            RecordingRulesNoData: true
+            CPUThrottlingHigh: true
+            InfoInhibitor: true
+
         # Aumentar CPU limits para eliminar CPUThrottlingHigh
         victoria-metrics-operator:
           resources:
