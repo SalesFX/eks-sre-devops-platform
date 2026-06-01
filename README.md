@@ -64,7 +64,7 @@ flowchart TB
     subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
         direction TB
 
-        ECR["Amazon ECR\nbackend : frontend"]
+        ECR["Amazon ECR\n2 repositorios: backend + frontend"]
 
         LBC["AWS Load Balancer Controller"]
         INGRESS["Ingress\npath: /  →  Frontend\npath: /backend/*  →  Backend"]
@@ -104,7 +104,7 @@ flowchart TB
     BE -->|"IAM token IRSA"| RDS
 
     RDS -.->|"connections, storage, memory"| CW
-    APP -.->|"metricas"| VM
+    APP -.->|"Prometheus metrics"| VM
 ```
 
 ## Infraestrutura
@@ -151,7 +151,7 @@ flowchart TB
 **INC-001 (Critico)**
 ![INC-001](docs/architecture/screenshots/inc-001-alert.png)
 
-Para reproduzir os incidentes com alertas reais no Grafana: ver [docs/incidents/](docs/incidents/) e usar a skill `/bo-real-prod`.
+Para reproduzir os incidentes com alertas reais no Grafana: ver [docs/incidents/](docs/incidents/).
 
 ## Acesso rapido
 
