@@ -1,19 +1,21 @@
 ---
 name: PlantonistaOps
 description: |
-  Plantão operacional (on-call runbook) para a plataforma devops-ia EKS + Terraform + ArgoCD.
-  Diagnostica e resolve incidentes conhecidos desta infraestrutura: Terraform provider sem permissão
-  de execução, S3 state lock travado, state vazio após apply interrompido, node group AL2 deprecated
-  (AMI inexistente), ASG preso no destroy, backend não inicializado, kubectl sem credenciais após
-  recreate do cluster, access entry EKS sumida, ArgoCD pod travado em ContainerCreating por falha
-  do CNI, dex-server crash com "server.secretkey is missing", e pressão de memória em t3.micro.
-  Use esta skill IMEDIATAMENTE sempre que o usuário descrever qualquer problema operacional com
-  EKS, Terraform, ArgoCD ou Kubernetes neste projeto — não tente debugar do zero, consulte este
-  runbook primeiro. Palavras-chave: travado, stuck, erro, falhou, node group, apply, destroy,
-  lock, state, CNI, ArgoCD, dex, kubectl, access denied, permission denied, creating, NodeCreationFailure.
+  Runbook de plantao para problemas de INFRAESTRUTURA da plataforma devops-ia.
+  Cobre: Terraform sem permissao de execucao, S3 state lock travado, state vazio apos apply
+  interrompido, node group AL2 deprecated (AMI inexistente), ASG preso no destroy,
+  kubectl sem credenciais apos recreate do cluster, access entry EKS sumida,
+  ArgoCD sistema travado em ContainerCreating (CNI), dex-server crash com secretkey missing,
+  pressao de memoria nos nodes.
+  Use esta skill para problemas de INFRAESTRUTURA: Terraform, EKS nodes, kubectl auth,
+  ArgoCD sistema (nao a aplicacao). Para problemas da aplicacao (pods do backend/frontend,
+  secrets, banco, migration), use o depoveiro.
+  Palavras-chave: terraform travado, lock, state vazio, node group, apply falhou, destroy preso,
+  kubectl unauthorized, access denied, CNI, dex crash, secretkey missing, node sem memoria,
+  NodeCreationFailure, permission denied no provider.
 ---
 
-# PlantonistaOps — Runbook de Plantão
+# PlantonistaOps - Runbook de Infraestrutura
 
 ## Contexto do Ambiente
 
@@ -24,7 +26,7 @@ description: |
 | Conta AWS | `074994084847` |
 | Bucket Terraform State | `devops-ia-production-terraform-state-074994084847` |
 | IAM Admin User | `arn:aws:iam::074994084847:user/adm-user` |
-| Raiz das Stacks | `/home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/` |
+| Raiz das Stacks | `/home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/` |
 | Tipo de Node | `t3.small` (2 GiB RAM), AL2023 |
 | AMI Type | `AL2023_x86_64_STANDARD` |
 
@@ -138,7 +140,7 @@ aws eks describe-cluster --name devops-ia-production --region us-east-1 --query 
 
 **Fix — Importar recursos da stack 02-eks-stack-ai:**
 ```bash
-cd /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/02-eks-stack-ai
+cd /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/02-eks-stack-ai
 VF="-var-file=envs/production.tfvars"
 
 terraform import $VF aws_iam_role.cluster devops-ia-production-cluster-role
@@ -241,7 +243,7 @@ EOT
 
 **Fix — Parte 3: Aplicar:**
 ```bash
-cd /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/02-eks-stack-ai
+cd /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/02-eks-stack-ai
 terraform apply -auto-approve -var-file="envs/production.tfvars"
 ```
 
@@ -338,7 +340,7 @@ aws eks list-access-entries \
 
 **Fix — Via Terraform (preferido, já codificado em eks.access-entry.tf):**
 ```bash
-cd /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/02-eks-stack-ai
+cd /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/02-eks-stack-ai
 terraform apply -auto-approve -var-file="envs/production.tfvars"
 ```
 
@@ -461,9 +463,9 @@ kubectl get pods -A --field-selector=status.phase=Pending
 ```bash
 # Atualizar production.tfvars: instance_types = ["t3.small"]
 sed -i 's/instance_types = \["t3.micro"\]/instance_types = ["t3.small"]/' \
-  /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/02-eks-stack-ai/envs/production.tfvars
+  /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/02-eks-stack-ai/envs/production.tfvars
 
-cd /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-terraform/02-eks-stack-ai
+cd /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/02-eks-stack-ai
 terraform apply -auto-approve -var-file="envs/production.tfvars"
 ```
 
@@ -531,7 +533,7 @@ kubectl wait pod --all -n argocd --for=condition=Ready --timeout=300s
 kubectl rollout restart deployment/argocd-dex-server -n argocd
 
 # 7. Aplicar ArgoCD Application
-kubectl apply -f /home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001/devops-ia-kubernetes/argocd-application.yaml
+kubectl apply -f /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-kubernetes/argocd-application.yaml
 
 # 8. Verificar estado final
 kubectl get pods -n argocd

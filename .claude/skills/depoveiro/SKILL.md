@@ -1,142 +1,226 @@
 ---
 name: depoveiro
-description: Diagnostica e corrige problemas de saúde do cluster EKS devops-ia-production. Use esta skill sempre que o usuário perguntar se a app está no ar, se os pods subiram, se tem algo errado no cluster, ou quando houver relato de pod travado, ImagePullBackOff, CNI error, ou ArgoCD fora de sync. Também use quando o usuário chamar /depoveiro diretamente.
+description: |
+  Diagnostica problemas de saude da APLICACAO no cluster EKS devops-ia-production.
+  Cobre pods do namespace app (backend, frontend), secrets ausentes, falha de conexao com RDS,
+  ArgoCD Application fora de sync, migration job falhando, ImagePullBackOff, CrashLoopBackOff,
+  readinessProbe falhando e servico retornando 503 no ALB.
+  Use esta skill quando o usuario perguntar se a app esta no ar, se o backend esta respondendo,
+  se os pods subiram, se o login funciona, ou quando relatar erro 503, pod travado, backend-secrets
+  not found, db nao conecta, migration falhou, ArgoCD mostrando Degraded ou OutOfSync na app devops-ia.
+  NAO use para problemas de Terraform, node group, kubectl sem credenciais ou ArgoCD sistema
+  (dex crash, CNI). Esses sao do PlantonistaOps.
+  Palavras-chave: app fora do ar, 503, backend nao responde, pod travado, secret nao existe,
+  migration falhou, db nao conecta, ArgoCD Degraded, devops-ia OutOfSync, health check falhando.
 ---
 
-## O que esta skill faz
+# Depoveiro - Diagnostico da Aplicacao
 
-Verifica o estado do cluster EKS e identifica os problemas conhecidos deste projeto, dando o diagnóstico e o passo a passo de correção.
+**Escopo:** namespace `app` + ArgoCD Application `devops-ia`
 
-**Cluster:** `devops-ia-production` | **Namespace principal:** `default`
-**Repo:** `/home/lustrabits/DevOps-Nuvem/eks-terraform-cicd-monitoring-001`
-
----
-
-## Passo 1 — Listar pods em default
-
-Use a ferramenta `mcp__awslabs_eks-mcp-server__list_k8s_resources` com `kind=Pod`, `api_version=v1`, `namespace=default`.
-
-Conte quantas gerações de ReplicaSet existem por app. Mais de 2 gerações por app indica rolling update travado.
-
----
-
-## Passo 2 — Pegar eventos dos pods problemáticos
-
-Para cada pod que não está Running (ou que existe em excesso), use `mcp__awslabs_eks-mcp-server__get_k8s_events` e identifique o padrão de falha.
-
----
-
-## Diagnóstico — padrões conhecidos
-
-### Padrão A: `InvalidImageName`
-**Sintoma:** Evento `InvalidImageName` ou `InspectFailed` com mensagem contendo `ACCOUNT_ID.dkr.ecr`.
-
-**Causa:** O `deployment.yaml` foi sanitizado com o placeholder literal `ACCOUNT_ID` no campo `image:`. O kustomize não consegue fazer match entre a base e o bloco `images:` do `kustomization.yaml`, então usa o placeholder como está — que não é um nome de imagem válido.
-
-**Correção:**
-1. Editar `devops-ia-kubernetes/backend/deployment.yaml` e `devops-ia-kubernetes/frontend/deployment.yaml` — substituir `ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` por `074994084847.dkr.ecr.us-east-1.amazonaws.com`
-2. Verificar no `devops-ia-kubernetes/kustomization.yaml` se há entradas duplicadas com `ACCOUNT_ID` — removê-las, manter apenas as com `074994084847`
-3. Commitar e fazer push → ArgoCD sincroniza automaticamente
+| Recurso | Valor |
+|---|---|
+| Cluster | `devops-ia-production` |
+| Namespace app | `app` |
+| ALB | `k8s-app-devopsia-a05a05588d-1756438931.us-east-1.elb.amazonaws.com` |
+| RDS | `devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com:5432` |
+| Repo | `/home/samuelsales/DevOps-Nuvem/aws-project-sre-devops` |
 
 ---
 
-### Padrão B: `ImagePullBackOff` — tag não existe no ECR
-**Sintoma:** Evento `Failed to pull image ... not found` com mensagem `rpc error: code = NotFound`.
+## Passo 1 - Estado dos pods no namespace app
 
-**Causa:** O CI só atualiza a tag da imagem que foi de fato construída no commit. Se apenas o frontend mudou, o backend fica com a tag anterior. Usar a mesma tag para as duas imagens garante que uma delas vai falhar.
-
-**Como identificar a tag correta por imagem:**
 ```bash
-git log --oneline origin/main | grep "ci: update image tags"
+kubectl get pods -n app
+kubectl get deployment -n app
 ```
-Isso mostra quais commits geraram auto-commits do CI. Cada commit `ci: update image tags to sha-XXXXXXX` foi disparado por uma build. Procurar nos commits regulares anteriores qual mudou `devops-ia-apps/backend/` vs `devops-ia-apps/frontend/` para saber qual imagem foi construída.
 
-Também verificar o `kustomization.yaml` no histórico — a última linha de cada imagem antes de qualquer edição manual indica a última tag realmente construída.
-
-**Correção:**
-Editar `devops-ia-kubernetes/kustomization.yaml` ajustando o `newTag` de cada imagem para a última tag realmente construída. Commitar e fazer push.
+Interpretar:
+- Todos `1/1 Running` com 0 restarts recentes: saudavel
+- `0/1 Running` com restarts crescendo: CrashLoopBackOff (ver Padrao B)
+- `ErrImagePull` / `ImagePullBackOff`: imagem invalida (ver Padrao A)
+- `CreateContainerConfigError`: secret ou configmap ausente (ver Padrao C)
+- `ContainerCreating` por mais de 2 min: secret ausente (ver Padrao C)
 
 ---
 
-### Padrão C: `FailedCreatePodSandBox` — CNI sem IPs
-**Sintoma:** Evento `failed to assign an IP address to container` do plugin `aws-cni`.
+## Passo 2 - Estado do ArgoCD Application
 
-**Causa:** O node onde o pod foi agendado esgotou os IPs secundários disponíveis nas ENIs. Ocorre quando um node concentra muitos pods (ArgoCD + kube-system + apps). O scheduler não sabe sobre esgotamento de IPs VPC-CNI, então pode continuar mandando pods para um node que já está cheio.
-
-**Identificar o node afetado:**
-- Ver em qual node o pod está (campo `Node:` no `kubectl describe pod <nome>`)
-- Ou usar `mcp__awslabs_eks-mcp-server__list_k8s_resources` com `field_selector=spec.nodeName=<node>` para contar quantos pods estão nesse node
-
-**Correção imediata (sem Terraform):**
 ```bash
-kubectl cordon <node-saturado>
-kubectl delete pod <pod-travado>
-# aguardar o novo pod subir no outro node
-kubectl uncordon <node-saturado>
+kubectl get application devops-ia -n argocd
 ```
 
-O cordon impede novos agendamentos no node saturado. O delete força o Deployment a recriar o pod, que desta vez vai para o node com IPs disponíveis.
-
-**Correção permanente:** Escalar o node group para 3+ nodes via Terraform na stack `02-eks-stack-ai`. Se o problema ocorrer em massa após scaling event, ver Padrão E.
+- `Synced + Healthy`: tudo certo
+- `OutOfSync + Healthy`: diff detectado mas app esta no ar, sync pendente
+- `Synced + Degraded`: pods com problema mesmo apos sync
+- `OutOfSync + Degraded`: sync falhou e pods com problema
 
 ---
 
-### Padrão E: CNI exhaustion em massa após rolling update ou scaling event
-**Sintoma:** Depois de um `terraform apply` que troca o launch template, ou depois de `aws eks update-nodegroup-config`, múltiplos pods de namespaces diferentes ficam Pending com `FailedCreatePodSandBox` — todos no mesmo node.
+## Passo 3 - Health do backend via ALB
 
-**Causa:** Durante o scaling/rolling update, novos nodes entram no cluster mas ainda estão inicializando o VPC CNI (ainda não pré-alocaram IPs secundários). O scheduler agenda dezenas de pods neles ao mesmo tempo — mais pods do que IPs disponíveis. Resultado: metade dos pods fica travada no mesmo node. É o Padrão C multiplicado.
-
-**Como identificar:**
 ```bash
-kubectl get pods -A --field-selector=status.phase=Pending
-# Se múltiplos pods de namespaces diferentes estão Pending, é este padrão
+curl -s http://k8s-app-devopsia-a05a05588d-1756438931.us-east-1.elb.amazonaws.com/backend/health
+# Esperado: {"status":"ok","db":"connected"}
+# 503: backend nao esta pronto (readinessProbe falhando)
+# {"status":"ok","db":"disconnected"}: banco inacessivel
 ```
 
-Verificar se estão todos no mesmo node:
-- Usar `mcp__awslabs_eks-mcp-server__get_k8s_events` em alguns dos pods — todos vão mostrar o mesmo node no evento `Scheduled`.
+---
 
-**Correção:**
-1. Cordon o node saturado: `kubectl cordon <node>`
-2. Deletar TODOS os pods Pending de uma vez (usar `manage_k8s_resource` com `operation=delete` para cada um em paralelo)
-3. Aguardar ~20s para os pods subirem nos outros nodes
-4. Uncordon: `kubectl uncordon <node>`
+## Padrao A - ImagePullBackOff / ErrImagePull
 
-**Importante:** Ao deletar pods de Deployments com PDB (`minAvailable: 1`), deletar um de cada Deployment por vez se houver apenas 2 réplicas — aguardar o novo subir antes de deletar o segundo. Para pods de workloads sem réplica (operator, agent), pode deletar todos de uma vez.
+**Causa:** tag de imagem inexistente no ECR
 
-**Correção permanente:** Ativar prefix delegation no VPC CNI para aumentar o número de IPs por ENI de 9 para 110 por node — elimina o problema de exhaustion em t3.small.
+**Diagnostico:**
+```bash
+kubectl describe pod <pod> -n app | grep -A5 "Events:"
+aws ecr describe-images --repository-name devops-ia/production/backend \
+  --query 'imageDetails[*].imageTags' --output table
+```
+
+**Fix:**
+```bash
+# GitOps (preferido)
+git revert HEAD && git push origin clean-main
+
+# Imperativo (mais rapido, requer git revert depois)
+kubectl set image deployment/backend \
+  backend=074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/backend:sha-da9bf41 \
+  -n app
+kubectl set image deployment/frontend \
+  frontend=074994084847.dkr.ecr.us-east-1.amazonaws.com/devops-ia/production/frontend:sha-da9bf41 \
+  -n app
+```
 
 ---
 
-### Padrão D: Multiple ReplicaSets acumulados
-**Sintoma:** Mais de 2 gerações de pods por app (ex: 3 pods de backend com hashes diferentes).
+## Padrao B - CrashLoopBackOff
 
-**Causa:** Rolling updates travados por falhas nos padrões A, B ou C. Cada sync do ArgoCD cria um novo ReplicaSet, os antigos ficam porque `maxUnavailable: 0` impede terminar pods sem ter novos Ready.
+**Causa:** erro de aplicacao (exit 1) ou memoria insuficiente (exit 137)
 
-**Correção:** Resolver o padrão A, B ou C que está bloqueando. Quando o novo pod ficar Ready, o Deployment controller termina os velhos automaticamente.
+**Diagnostico:**
+```bash
+kubectl logs -l app.kubernetes.io/name=backend -n app --tail=30
+kubectl describe pod <pod> -n app | grep -A3 "Last State"
+# Exit code 1: erro de config/aplicacao
+# Exit code 137: OOMKilled
+```
+
+**Fix para OOMKilled:**
+```bash
+kubectl set resources deployment backend \
+  --limits=memory=512Mi --requests=memory=128Mi -n app
+```
+
+**Fix para erro de aplicacao:** ver Padrao C ou D.
 
 ---
 
-## Verificar ArgoCD
+## Padrao C - CreateContainerConfigError (secret ausente)
 
-Use `mcp__awslabs_eks-mcp-server__get_k8s_events` com `kind=Application`, `name=devops-ia`, `namespace=argocd` para ver o último sync e o health status.
+**Causa:** `backend-secrets` nao existe no namespace `app`
 
-- **Synced + Healthy:** tudo certo
-- **Synced + Progressing:** sync feito, aguardando pods ficarem Ready
-- **Synced + Degraded:** pods com problema (verificar padrões acima)
-- **OutOfSync:** ArgoCD ainda não detectou o último commit (aguardar até 3 min ou verificar repo URL)
+**Diagnostico:**
+```bash
+kubectl get secret backend-secrets -n app
+# Error: not found -> confirma o problema
+```
+
+**Fix:**
+```bash
+aws rds generate-db-auth-token \
+  --hostname devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com \
+  --port 5432 --region us-east-1 --username app_user > /tmp/iam_token.txt
+
+DATABASE_URL=$(python3 - <<'EOF'
+import urllib.parse
+with open('/tmp/iam_token.txt') as f:
+    token = f.read().strip()
+encoded = urllib.parse.quote(token, safe='')
+print(f"postgresql://app_user:{encoded}@devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com:5432/devops_ia?sslmode=require")
+EOF
+)
+rm -f /tmp/iam_token.txt
+
+kubectl create secret generic backend-secrets \
+  --from-literal=database-url="$DATABASE_URL" \
+  --from-literal=jwt-secret="$(openssl rand -base64 32)" \
+  -n app --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl rollout restart deployment/backend -n app
+```
 
 ---
 
-## Output esperado ao final do diagnóstico
+## Padrao D - RDS inacessivel (PAM auth failed)
+
+**Causa:** `rds_iam` revogado do `app_user` ou token IAM expirado
+
+**Diagnostico:**
+```bash
+kubectl logs -l app.kubernetes.io/name=backend -n app | grep -i "PAM\|auth\|connect\|error"
+```
+
+**Fix:**
+```bash
+MASTER_SECRET_ARN=$(cd /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-terraform/05-database-stack-ai && terraform output -raw db_master_user_secret_arn)
+MASTER_PASS=$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_ARN" \
+  --query 'SecretString' --output text | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['password'])")
+
+kubectl run pg-fix --image=postgres:16-alpine --restart=Never -n app \
+  --env="PGPASSWORD=$MASTER_PASS" \
+  -- psql -h devops-ia-production.cqfcm424geyn.us-east-1.rds.amazonaws.com \
+  -U dbadmin -d devops_ia -c "GRANT rds_iam TO app_user;"
+
+sleep 8 && kubectl logs pg-fix -n app && kubectl delete pod pg-fix -n app --force
+
+# Apos restaurar o grant, recriar o secret (ver Padrao C)
+```
+
+---
+
+## Padrao E - Migration Job Falhando
+
+**Causa:** imagem ruim, secret ausente ou schema incompativel
+
+**Diagnostico:**
+```bash
+kubectl logs -l job-name=backend-migration -n app --tail=20
+```
+
+**Fix:**
+```bash
+kubectl delete job backend-migration -n app
+kubectl apply -k /home/samuelsales/DevOps-Nuvem/aws-project-sre-devops/devops-ia-kubernetes/
+```
+
+---
+
+## Padrao F - ArgoCD Application OutOfSync ou Degraded
+
+**Diagnostico:**
+```bash
+kubectl get application devops-ia -n argocd \
+  -o jsonpath='{.status.operationState.message}'
+```
+
+**Fix:**
+```bash
+kubectl annotate application devops-ia -n argocd \
+  argocd.argoproj.io/refresh=hard --overwrite
+```
+
+---
+
+## Output esperado ao final
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Diagnóstico: devops-ia-production / default
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-frontend   — ✓ 2 pods Running (sha-XXXXXXX)
-backend    — ✗ 1/2 pods Running | 1 em FailedCreatePodSandBox
-ArgoCD     — Synced / Progressing
+Namespace app:
+  backend-xxx   1/1 Running  ok
+  frontend-xxx  1/1 Running  ok
 
-Problema identificado: Padrão C — CNI IP exhaustion no node ip-10-0-12-56
-Correção: cordon + delete pod + uncordon (ver instruções acima)
+ArgoCD devops-ia: Synced / Healthy
+
+ALB health: {"status":"ok","db":"connected"}
 ```
