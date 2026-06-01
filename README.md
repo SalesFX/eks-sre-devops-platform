@@ -29,6 +29,26 @@ Plataforma cloud native executando na AWS com aplicacao real em producao (Incide
 | Seguranca de pipeline | Gitleaks, Checkov, Semgrep, Trivy (10 jobs de scan) |
 | Seguranca de workload | non-root, readOnlyRootFilesystem, drop ALL capabilities, IRSA |
 
+## AI-Assisted Operations
+
+Este projeto foi desenvolvido com Claude Code usando agentes especializados e skills reutilizaveis para acelerar e estruturar o trabalho de plataforma.
+
+**Agentes** com papeis bem definidos e restricoes claras:
+- Arquiteto de solucoes: planeja, avalia trade-offs e produz ADRs (nunca escreve codigo)
+- DevOps Engineer: implementa IaC a partir dos ADRs aprovados
+- Engenheiro DevSecOps: revisa codigo, Terraform e pipelines antes de qualquer commit
+- Especialista RDS: cobre banco, IRSA, migrations e runbooks de incidente
+
+**Skills** reutilizaveis para operacoes de plataforma:
+- Diagnostico de aplicacao vs diagnostico de infraestrutura (escopos separados)
+- Simulacao de incidentes com ciclo SRE completo
+- Rebuild de infraestrutura do zero com todos os passos manuais documentados
+
+O diferencial nao e usar IA para gerar codigo: e ter criado um processo estruturado onde cada agente tem responsabilidade unica, entregaveis definidos e restricoes explicitas.
+
+- [docs/agents/](docs/agents/README.md)
+- [docs/skills/](docs/skills/README.md)
+
 ## Aplicacao
 
 **Incident Tracker** — sistema real de gerenciamento de incidentes com autenticacao JWT, dashboard e historico.
@@ -171,26 +191,6 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 # ALB endpoint
 kubectl get ingress devops-ia -n app -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
-
-## AI-Assisted Operations
-
-Este projeto foi desenvolvido com Claude Code usando agentes especializados e skills reutilizaveis para acelerar e estruturar o trabalho de plataforma.
-
-**Agentes** com papeis bem definidos e restricoes claras:
-- Arquiteto de solucoes: planeja, avalia trade-offs e produz ADRs (nunca escreve codigo)
-- DevOps Engineer: implementa IaC a partir dos ADRs aprovados
-- Engenheiro DevSecOps: revisa codigo, Terraform e pipelines antes de qualquer commit
-- Especialista RDS: cobre banco, IRSA, migrations e runbooks de incidente
-
-**Skills** reutilizaveis para operacoes de plataforma:
-- Diagnostico de aplicacao vs diagnostico de infraestrutura (escopos separados)
-- Simulacao de incidentes com ciclo SRE completo
-- Rebuild de infraestrutura do zero com todos os passos manuais documentados
-
-O diferencial nao e usar IA para gerar codigo: e ter criado um processo estruturado onde cada agente tem responsabilidade unica, entregaveis definidos e restricoes explicitas.
-
-- [docs/agents/](docs/agents/README.md)
-- [docs/skills/](docs/skills/README.md)
 
 ## Documentacao
 
