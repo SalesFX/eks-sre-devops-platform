@@ -1,8 +1,8 @@
-# .semgrepignore — Paths ignorados pelo Semgrep.
-# Referência: https://semgrep.dev/docs/ignoring-files-folders-code/
-# ADR: ADR-0009 (segurança pipeline)
+# .semgrepignore - Paths ignorados pelo Semgrep.
+# Referencia: https://semgrep.dev/docs/ignoring-files-folders-code/
+# ADR: ADR-0009 (seguranca pipeline)
 
-# Dependências e artefatos de build — nunca são código de produção
+# Dependencias e artefatos de build, nunca sao codigo de producao
 node_modules/
 .next/
 bin/
@@ -10,7 +10,7 @@ obj/
 dist/
 out/
 
-# Fixtures de teste — podem conter padrões que disparam regras SAST
+# Fixtures de teste, podem conter padroes que disparam regras SAST
 **/testdata/
 **/fixtures/
 **/__tests__/

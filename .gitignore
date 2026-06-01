@@ -204,4 +204,8 @@ SCREENSHOTS.md
 # Prisma generated client and SQLite dev artifacts
 prisma/generated/
 *.db
-*.db-journalSTATUS.md
+*.db-journal
+
+# Scripts locais de conveniencia
+port-forward.sh
+STATUS.md
