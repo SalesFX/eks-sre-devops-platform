@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DevOps/SRE portfolio platform on AWS running a real application: **Incident Tracker** (incident management system). Backend is Node.js 20 + Express + TypeScript + Prisma ORM; frontend is Next.js 14 + Tailwind CSS. Database is RDS PostgreSQL 16 with IAM Database Authentication via IRSA — no static passwords anywhere. All application workloads run in the `app` namespace.
+DevOps/SRE portfolio platform on AWS running a real application: **Incident Tracker** (incident management system). Backend is Node.js 20 + Express + TypeScript + Prisma ORM; frontend is Next.js 14 + Tailwind CSS. Database is RDS PostgreSQL 16 with IAM Database Authentication via IRSA (no static passwords anywhere). All application workloads run in the `app` namespace.
 
 Stacks are independent directories prefixed with a two-digit number (e.g. `01-networking-stack-ai`). The `00-remote-backend-stack-ai` stack (if it exists) is always excluded from bulk operations.
 
@@ -17,6 +17,7 @@ Stacks are independent directories prefixed with a two-digit number (e.g. `01-ne
   - `frontend/devops-ia-platform/` — Next.js 14 + Tailwind CSS
 - `devops-ia-kubernetes/` — Kubernetes manifests organized by application
   - `storage/` — StorageClass gp3 (default cluster StorageClass)
+  - `demo-alerts-vmrule.yaml` — VMRules customizadas para o namespace `app` com thresholds de 30s-1m para simulacao de incidentes
 
 ### Terraform Stacks (00-05)
 
@@ -42,10 +43,12 @@ Four specialized agents are defined in `.claude/agents/`:
 
 Skills are defined in `.claude/skills/`:
 
-- **`terraform-deploy`** — Deploys Terraform stacks (`fmt` → `validate` → `plan` → `apply`)
+- **`terraform-deploy`** — Deploys Terraform stacks (`fmt` -> `validate` -> `plan` -> `apply`)
 - **`dockerfile-generator`** — Generates optimized Dockerfiles (multi-stage, alpine, rootless, healthcheck)
 - **`docker-push-ecr`** — Builds and pushes Docker images to ECR
 - **`resolve-bo-inicial`** — Full rebuild runbook: clean infra, Terraform, RDS user setup, secrets, images, kustomize deploy, ArgoCD, monitoring. Invoke whenever doing a fresh deploy from scratch.
+- **`depoveiro`** — Diagnoses EKS cluster health: stuck pods, ImagePullBackOff, CNI errors, ArgoCD out of sync. Invoke whenever pods are not starting or the cluster seems unhealthy.
+- **`PlantonistaOps`** — On-call runbook for known incidents: Terraform state lock, node group stuck, kubectl without credentials, ArgoCD dex crash, memory pressure on t3.small.
 
 ## Deploy Workflow
 
@@ -59,7 +62,7 @@ Use the `terraform-deploy` skill (`.claude/skills/terraform-deploy/`):
 /terraform-deploy
 ```
 
-The skill runs: `fmt` → `validate` → `plan` (prints output) → `apply -auto-approve`, always passing `-var-file="envs/production.tfvars"` when present.
+The skill runs: `fmt` -> `validate` -> `plan` (prints output) -> `apply -auto-approve`, always passing `-var-file="envs/production.tfvars"` when present.
 
 ## Fresh Deploy (Rebuild from Scratch)
 
@@ -76,12 +79,15 @@ The full sequence after Terraform completes is **not just kubectl apply** — th
 8. Create namespace `monitoring` and `grafana-admin-secret`
 9. Install ArgoCD with `--server-side --force-conflicts` (CRDs are too large for client-side apply)
 10. Apply `argocd-application.yaml` and `monitoring-application.yaml`
+11. Create demo user via `POST /backend/auth/register` (bank is empty after fresh RDS)
 
 **Critical gotchas:**
 - Never `kubectl apply -f` individual deployment files — kustomize must set the image tag
 - The `kustomization.yaml` must not have `commonLabels` — it makes Deployment selectors immutable and breaks ArgoCD sync
 - The S3 state bucket uses versioning — when cleaning, delete all versions and delete markers, not just current objects
 - Terraform state lock files (`*.tflock`) in S3 must be deleted manually if a previous apply was interrupted
+- Monitoring Helm `releaseName` must be `vm` (not `victoria-metrics`) — longer names exceed the 63-char Kubernetes limit for service names
+- Grafana service is `vm-grafana` (not `victoria-metrics-grafana`) — port-forward: `kubectl port-forward svc/vm-grafana -n monitoring 3000:80`
 
 ## Manual Terraform Commands
 
@@ -104,10 +110,13 @@ Configured in `.mcp.json`:
 
 - `docs/` — ADRs produced by the architect agent (`ADR-XXXX-title.md`)
 - `docs/implementation/` — Implementation records produced by the engineer agent (`IMPL-ADR-XXXX-YYYY-MM-DD.md`)
+- `docs/runbooks/` — Operational runbooks for known failure scenarios
+- `docs/incidents/` — Real incident simulations with timeline, alerts, MTTR and resolution (INC-001 to INC-004)
+- `docs/architecture/screenshots/` — Screenshots of the platform for the README
 
 ## Writing Style
 
-Full rules in `.claude/rules/writing-style.md`. Key point: **no em-dashes (travessão "—") anywhere** — not in job names, step names, workflow names, PR titles, commit messages, or any user-visible text. Write names naturally: `Frontend SAST (Semgrep)`, not `SAST — Frontend (Semgrep)`.
+Full rules in `.claude/rules/writing-style.md`. Key point: **no em-dashes (travessao) anywhere** — not in job names, step names, workflow names, PR titles, commit messages, or any user-visible text. Write names naturally: `Frontend SAST (Semgrep)`, not `SAST - Frontend (Semgrep)`.
 
 ## Terraform Conventions
 
