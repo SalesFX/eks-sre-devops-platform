@@ -47,31 +47,35 @@ flowchart TB
         direction TB
         DEV["Desenvolvedor\npush clean-main"]
         GHA["GitHub Actions\nCI/CD + Security Scans"]
-        ECR["Amazon ECR\nbackend : frontend"]
         KUST["kustomization.yaml\natualiza image tag sha-xxxxx\ncommit skip-ci no git"]
 
         DEV -->|"git push"| GHA
-        GHA -->|"docker push"| ECR
         GHA -->|"commit tag"| KUST
     end
 
     subgraph GITOPS["GitOps"]
         direction TB
-        ARGO["ArgoCD\ndetecta mudanca no git\nautomated sync + self-heal"]
-        KUST -->|"ArgoCD detecta\nnovo commit"| ARGO
+        subgraph NS_ARGOCD["namespace: argocd"]
+            ARGO["ArgoCD\nmonitora repositorio Git\nauto-sync + self-heal"]
+        end
+        KUST -->|"novo commit detectado"| ARGO
     end
 
     subgraph CLUSTER["EKS Cluster — devops-ia-production (4x t3.small)"]
         direction TB
 
-        ALB["Application Load Balancer\npath: / → frontend\npath: /backend/* → backend"]
+        ECR["Amazon ECR\nbackend : frontend"]
+
+        LBC["AWS Load Balancer Controller"]
+        INGRESS["Ingress\npath: /  →  Frontend\npath: /backend/*  →  Backend"]
+        LBC --> INGRESS
 
         subgraph APP["namespace: app"]
             direction TB
             FE["Frontend\n2 pods Next.js"]
             BE["Backend\n2 pods Node.js"]
             MIG["Migration Job\nprisma migrate deploy\nPreSync hook"]
-            FE -->|"API calls\n/backend/*"| BE
+            FE -->|"API calls /backend/*"| BE
         end
 
         subgraph MON["namespace: monitoring"]
@@ -79,12 +83,12 @@ flowchart TB
             VM["VictoriaMetrics"] --> GF["Grafana"]
         end
 
-        ALB -->|"/ (paginas)"| FE
-        ALB -->|"/backend/* (API)"| BE
+        ECR -->|"image pull"| APP
+        INGRESS -->|"/"| FE
+        INGRESS -->|"/backend/*"| BE
     end
 
     subgraph DATA["Data"]
-        direction TB
         RDS[("RDS PostgreSQL 16\nprivate subnet")]
     end
 
@@ -93,8 +97,8 @@ flowchart TB
         CW["CloudWatch\nRDS Alarms"] --> SNS["SNS"] --> EMAIL["Email"]
     end
 
+    GHA -->|"docker push"| ECR
     ARGO -->|"sync desired state"| APP
-    ECR -->|"image pull"| APP
 
     MIG -->|"migrate deploy"| RDS
     BE -->|"IAM token IRSA"| RDS
