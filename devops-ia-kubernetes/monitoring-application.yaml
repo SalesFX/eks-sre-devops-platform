@@ -81,6 +81,29 @@ spec:
 
         alertmanager:
           enabled: false
+
+        # EKS nao expoe control plane — desabilitar scraping e alertas desses componentes
+        kubeControllerManager:
+          enabled: false
+
+        kubeScheduler:
+          enabled: false
+
+        kubeEtcd:
+          enabled: false
+
+        kubeProxy:
+          enabled: false
+
+        # Aumentar CPU limits para eliminar CPUThrottlingHigh
+        victoria-metrics-operator:
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
