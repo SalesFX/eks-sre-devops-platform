@@ -385,6 +385,29 @@ aws rds describe-db-instances \
 
 ---
 
+## FASE 10 — Seed do usuario demo
+
+O banco e recriado vazio. O usuario demo nao existe. Criar via API apos a app estar no ar:
+
+```bash
+ALB="<endpoint do kubectl get ingress -n app>"
+
+curl -s -X POST "http://$ALB/backend/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"notsamuelsales@gmail.com","password":"DevOps@2026","name":"Demo User"}'
+```
+
+Confirmar que o login funciona:
+
+```bash
+curl -s -X POST "http://$ALB/backend/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"notsamuelsales@gmail.com","password":"DevOps@2026"}'
+# Deve retornar {"token":"...","user":{...}}
+```
+
+---
+
 ## Problemas conhecidos e solucoes
 
 ### "spec.selector: Invalid value ... field is immutable"
